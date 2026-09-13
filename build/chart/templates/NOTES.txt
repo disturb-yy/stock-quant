@@ -1,0 +1,10 @@
+1. The Stock Quant chart has been installed.
+
+{{- if .Values.ingress.enabled }}
+2. Access the service through the configured Ingress host.
+{{- else }}
+2. To access the service locally, run:
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "stock-quant.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl --namespace {{ .Release.Namespace }} port-forward "$POD_NAME" 8080:{{ .Values.service.port }}
+{{- end }}
+

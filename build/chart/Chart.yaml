@@ -1,0 +1,7 @@
+apiVersion: v2
+name: stock-quant
+description: Helm chart for the Stock Quant service.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+

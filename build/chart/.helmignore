@@ -1,0 +1,9 @@
+.git/
+.gitignore
+.idea/
+.env
+.env.*
+!.env.example
+*.swp
+*.tmp
+
