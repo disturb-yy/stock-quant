@@ -9,12 +9,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const defaultHTTPAddress = ":8080"
+const (
+	defaultHTTPAddress = ":8357"
+	apiV1Prefix        = "/api/v1"
+)
 
 func newRouter(applicationLogger *slog.Logger) *gin.Engine {
 	router := gin.New()
 	router.Use(logger.GinMiddleware(applicationLogger), gin.Recovery())
-	health.RegisterRoutes(router)
+	health.RegisterRoutes(router.Group(apiV1Prefix))
 	return router
 }
 

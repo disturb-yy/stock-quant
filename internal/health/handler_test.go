@@ -12,19 +12,15 @@ import (
 func TestRegisterRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router)
+	RegisterRoutes(router.Group("/api/v1"))
 
 	tests := []struct {
 		name string
 		path string
 	}{
 		{
-			name: "heartbeat",
-			path: heartbeatPath,
-		},
-		{
-			name: "probe",
-			path: probePath,
+			name: "api v1 health",
+			path: "/api/v1/health",
 		},
 	}
 

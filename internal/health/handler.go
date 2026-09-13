@@ -7,24 +7,18 @@ import (
 )
 
 const (
-	heartbeatPath = "/heartbeat"
-	probePath     = "/probe"
+	healthPath = "/health"
 )
 
 type response struct {
 	Status string `json:"status"`
 }
 
-// RegisterRoutes registers process-level health endpoints on the HTTP router.
-func RegisterRoutes(router *gin.Engine) {
-	router.GET(heartbeatPath, heartbeatHandler)
-	router.GET(probePath, probeHandler)
+// RegisterRoutes registers the health endpoint on an API version group.
+func RegisterRoutes(router *gin.RouterGroup) {
+	router.GET(healthPath, healthHandler)
 }
 
-func heartbeatHandler(context *gin.Context) {
-	context.JSON(http.StatusOK, response{Status: "ok"})
-}
-
-func probeHandler(context *gin.Context) {
+func healthHandler(context *gin.Context) {
 	context.JSON(http.StatusOK, response{Status: "ok"})
 }
