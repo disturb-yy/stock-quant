@@ -17,7 +17,7 @@ const (
 	maxRequestIDLength = 128
 )
 
-// GinMiddleware adds request-scoped logging and emits one access log per response.
+// GinMiddleware 添加请求级日志，并为每个响应输出一条访问日志。
 func GinMiddleware(logger *slog.Logger) gin.HandlerFunc {
 	if logger == nil {
 		panic("logger is required")

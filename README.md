@@ -139,6 +139,15 @@ go run ./cmd/server
 go test ./...
 ```
 
+## 本地运行与健康检查
+
+```bash
+HTTP_ADDRESS=:8357 go run ./cmd/server
+curl -i http://127.0.0.1:8357/api/v1/health
+```
+
+健康接口成功返回 HTTP `200` 和 `{"status":"ok"}`。`HTTP_ADDRESS` 缺失时使用 `:8357`；地址格式错误或端口被占用时，启动日志会输出具体地址和底层错误。
+
 ## 静态检查
 
 ```bash

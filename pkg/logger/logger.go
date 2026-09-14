@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Config controls the output and common fields of an application logger.
+// Config 控制应用日志实例的输出方式和通用字段。
 type Config struct {
 	Service     string
 	Environment string
@@ -17,7 +17,7 @@ type Config struct {
 	Output      io.Writer
 }
 
-// New creates a structured logger with common service fields and secret redaction.
+// New 创建带通用服务字段和敏感信息脱敏能力的结构化日志实例。
 func New(config Config) (*slog.Logger, error) {
 	service := strings.TrimSpace(config.Service)
 	if service == "" {

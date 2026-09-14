@@ -14,7 +14,7 @@ type response struct {
 	Status string `json:"status"`
 }
 
-// RegisterRoutes registers the health endpoint on an API version group.
+// RegisterRoutes 在 API 版本路由分组中注册健康检查接口。
 func RegisterRoutes(router *gin.RouterGroup) {
 	router.GET(healthPath, healthHandler)
 }

@@ -8,14 +8,14 @@ import (
 	"strings"
 )
 
-// OutputConfig controls where application logs are written.
+// OutputConfig 控制应用日志的输出位置。
 type OutputConfig struct {
 	Destination string
 	Directory   string
 	Service     string
 }
 
-// OpenOutput opens the configured log destination.
+// OpenOutput 打开配置的日志输出目标。
 func OpenOutput(config OutputConfig) (io.WriteCloser, error) {
 	switch strings.ToLower(strings.TrimSpace(config.Destination)) {
 	case "", "console":

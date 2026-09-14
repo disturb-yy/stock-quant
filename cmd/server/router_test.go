@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"example.com/stock-ddd/pkg/config"
 	"github.com/gin-gonic/gin"
 )
 
@@ -72,10 +73,10 @@ func TestHealthEndpointOverHTTP(t *testing.T) {
 
 func TestNewHTTPServer(t *testing.T) {
 	applicationLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := newHTTPServer(applicationLogger)
+	server := newHTTPServer(applicationLogger, config.DefaultHTTPAddress)
 
-	if server.Addr != defaultHTTPAddress {
-		t.Fatalf("server address = %q, want %q", server.Addr, defaultHTTPAddress)
+	if server.Addr != config.DefaultHTTPAddress {
+		t.Fatalf("server address = %q, want %q", server.Addr, config.DefaultHTTPAddress)
 	}
 	if server.Handler == nil {
 		t.Fatal("server handler is nil")

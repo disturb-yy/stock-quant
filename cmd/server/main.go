@@ -11,6 +11,11 @@ import (
 )
 
 func main() {
+	httpAddress, err := config.LoadHTTPAddress()
+	if err != nil {
+		log.Fatalf("load HTTP address: %v", err)
+	}
+
 	serviceName := config.LoadServiceName()
 	loggingConfig := config.LoadLogging()
 	logOutput, err := logger.OpenOutput(logger.OutputConfig{
@@ -42,7 +47,15 @@ func main() {
 	}
 
 	applicationLogger.Info("application logger initialized")
-	server := newHTTPServer(applicationLogger)
+	if err := initializeMigrations(applicationLogger); err != nil {
+		applicationLogger.Error("initialize database migrations", "error", err)
+		if closeErr := logOutput.Close(); closeErr != nil {
+			applicationLogger.Error("close log output", "error", closeErr)
+		}
+		os.Exit(1)
+	}
+
+	server := newHTTPServer(applicationLogger, httpAddress)
 	applicationLogger.Info("HTTP server starting", "address", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		applicationLogger.Error("HTTP server stopped", "error", err)

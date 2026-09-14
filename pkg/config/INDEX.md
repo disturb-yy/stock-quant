@@ -19,13 +19,14 @@ loader.go
 
 ## Current Contents
 
-- `config.go`：读取服务标识和通用运行时日志配置，并提供开发、生产环境的默认值。
+- `config.go`：读取服务标识、HTTP 监听地址和通用运行时日志配置，并提供开发、生产环境的默认值。
 
 ## Application Environment Variables
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `SERVICE_NAME` | `stock-quant` | 应用根日志中的服务标识；部署时由 Helm values 注入。 |
+| `HTTP_ADDRESS` | `:8357` | HTTP Server 监听地址；必须是合法的 `host:port` 且端口在 1-65535 之间。 |
 
 ## Logging Environment Variables
 

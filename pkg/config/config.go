@@ -1,11 +1,17 @@
 package config
 
 import (
+	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 )
 
-// Logging contains the runtime settings used to construct the application logger.
+// DefaultHTTPAddress 是 HTTP 服务默认监听地址。
+const DefaultHTTPAddress = ":8357"
+
+// Logging 包含构造应用日志实例所需的运行时配置。
 type Logging struct {
 	Environment string
 	Level       string
@@ -14,12 +20,28 @@ type Logging struct {
 	Directory   string
 }
 
-// LoadServiceName reads the service name used by the application logger.
+// LoadServiceName 读取应用日志使用的服务名称。
 func LoadServiceName() string {
 	return valueOrDefault(os.Getenv("SERVICE_NAME"), "stock-quant")
 }
 
-// LoadLogging reads logging settings from the process environment.
+// LoadHTTPAddress 读取并校验 HTTP 服务的监听地址。
+func LoadHTTPAddress() (string, error) {
+	address := valueOrDefault(os.Getenv("HTTP_ADDRESS"), DefaultHTTPAddress)
+	_, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return "", fmt.Errorf("parse HTTP_ADDRESS %q: %w", address, err)
+	}
+
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return "", fmt.Errorf("parse HTTP_ADDRESS %q: port must be between 1 and 65535", address)
+	}
+
+	return address, nil
+}
+
+// LoadLogging 从进程环境变量中读取日志配置。
 func LoadLogging() Logging {
 	environment := environmentFromEnv()
 	format := logFormatFromEnv(environment)

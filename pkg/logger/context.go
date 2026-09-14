@@ -12,23 +12,23 @@ const (
 	requestLoggerContextKey
 )
 
-// WithRequestID stores a validated request ID in a request context.
+// WithRequestID 将经过校验的请求 ID 写入请求上下文。
 func WithRequestID(ctx context.Context, requestID string) context.Context {
 	return context.WithValue(ctx, requestIDContextKey, requestID)
 }
 
-// RequestIDFromContext returns the request ID attached by a request middleware.
+// RequestIDFromContext 返回请求中间件附加的请求 ID。
 func RequestIDFromContext(ctx context.Context) (string, bool) {
 	requestID, ok := ctx.Value(requestIDContextKey).(string)
 	return requestID, ok
 }
 
-// WithRequestLogger stores a request-scoped logger in a request context.
+// WithRequestLogger 将请求级日志实例写入请求上下文。
 func WithRequestLogger(ctx context.Context, logger *slog.Logger) context.Context {
 	return context.WithValue(ctx, requestLoggerContextKey, logger)
 }
 
-// RequestLoggerFromContext returns the request-scoped logger when one is available.
+// RequestLoggerFromContext 返回请求上下文中的请求级日志实例。
 func RequestLoggerFromContext(ctx context.Context) (*slog.Logger, bool) {
 	logger, ok := ctx.Value(requestLoggerContextKey).(*slog.Logger)
 	return logger, ok && logger != nil

@@ -10,8 +10,7 @@ import (
 )
 
 const (
-	defaultHTTPAddress = ":8357"
-	apiV1Prefix        = "/api/v1"
+	apiV1Prefix = "/api/v1"
 )
 
 func newRouter(applicationLogger *slog.Logger) *gin.Engine {
@@ -21,9 +20,9 @@ func newRouter(applicationLogger *slog.Logger) *gin.Engine {
 	return router
 }
 
-func newHTTPServer(applicationLogger *slog.Logger) *http.Server {
+func newHTTPServer(applicationLogger *slog.Logger, address string) *http.Server {
 	return &http.Server{
-		Addr:    defaultHTTPAddress,
+		Addr:    address,
 		Handler: newRouter(applicationLogger),
 	}
 }

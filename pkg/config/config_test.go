@@ -30,6 +30,60 @@ func TestLoadServiceName(t *testing.T) {
 	}
 }
 
+func TestLoadHTTPAddress(t *testing.T) {
+	tests := []struct {
+		name    string
+		address string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "default address",
+			want: DefaultHTTPAddress,
+		},
+		{
+			name:    "explicit address",
+			address: "127.0.0.1:18357",
+			want:    "127.0.0.1:18357",
+		},
+		{
+			name:    "missing port",
+			address: "127.0.0.1",
+			wantErr: true,
+		},
+		{
+			name:    "invalid port",
+			address: ":not-a-port",
+			wantErr: true,
+		},
+		{
+			name:    "out of range port",
+			address: ":65536",
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("HTTP_ADDRESS", test.address)
+
+			got, err := LoadHTTPAddress()
+			if test.wantErr {
+				if err == nil {
+					t.Fatal("LoadHTTPAddress() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadHTTPAddress() error = %v", err)
+			}
+			if got != test.want {
+				t.Fatalf("LoadHTTPAddress() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestLoadLogging(t *testing.T) {
 	tests := []struct {
 		name        string

@@ -21,20 +21,21 @@ podLabels: {}
 podSecurityContext: {}
 securityContext: {}
 
-containerPort: 8080
+containerPort: 8357
 
 service:
   type: ClusterIP
-  port: 8080
+  port: 8357
 
-# These values are consumed by pkg/config at process startup.
+# 这些配置由 pkg/config 在进程启动时读取。
 env:
   SERVICE_NAME: stock-quant
+  HTTP_ADDRESS: :8357
   APP_ENV: production
   LOG_LEVEL: info
   LOG_FORMAT: json
   LOG_OUTPUT: console
-  # Set LOG_OUTPUT to file only when LOG_DIR is backed by a writable volume.
+# 仅当 LOG_DIR 由可写卷承载时，才将 LOG_OUTPUT 设置为 file。
   LOG_DIR: /var/log/stock-quant
 
 ingress:
