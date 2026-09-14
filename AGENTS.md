@@ -212,6 +212,6 @@ context.Context
 - 复制父级 AGENTS.md 全文到子 package。
 
 ## Coding Style
-- 使用中文
+- 使用中文注释
 - 复杂函数添加注释
 - 单函数避免过长，及时抽象成多个函数
