@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -9,8 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/stock-ddd/pkg/api"
-	"example.com/stock-ddd/pkg/config"
+	"github.com/disturb-yy/stock-quant/internal/demo"
+	"github.com/disturb-yy/stock-quant/internal/market"
+	"github.com/disturb-yy/stock-quant/pkg/api"
+	"github.com/disturb-yy/stock-quant/pkg/config"
 	"github.com/gin-gonic/gin"
 )
 
@@ -32,7 +35,7 @@ func TestNewRouterRegistersHealthRoutes(t *testing.T) {
 		})
 	}
 
-	for _, path := range []string{"/heartbeat", "/probe", "/health"} {
+	for _, path := range []string{"/heartbeat", "/probe", "/health", "/api/v1/dev/demo-status"} {
 		t.Run("removed "+path, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, path, nil)
@@ -43,6 +46,40 @@ func TestNewRouterRegistersHealthRoutes(t *testing.T) {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
 			}
 		})
+	}
+}
+
+type fakeDemoStatusReader struct {
+	status demo.DemoStatus
+}
+
+func (reader fakeDemoStatusReader) DemoStatus(context.Context) (demo.DemoStatus, error) {
+	return reader.status, nil
+}
+
+func TestNewRouterRegistersDevelopmentDemoStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	applicationLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	router := newRouter(applicationLogger, fakeDemoStatusReader{
+		status: demo.DemoStatus{Mode: "demo", Provider: market.DemoProviderName, SeedVersion: demo.SeedVersion},
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/dev/demo-status", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if !strings.Contains(response.Body.String(), `"mode":"demo"`) {
+		t.Fatalf("response = %q, want demo mode", response.Body.String())
+	}
+
+	openAPIResponse := httptest.NewRecorder()
+	openAPIRequest := httptest.NewRequest(http.MethodGet, "/api/v1/openapi.json", nil)
+	router.ServeHTTP(openAPIResponse, openAPIRequest)
+	if !strings.Contains(openAPIResponse.Body.String(), "/api/v1/dev/demo-status") {
+		t.Fatal("development OpenAPI must include demo status path")
 	}
 }
 

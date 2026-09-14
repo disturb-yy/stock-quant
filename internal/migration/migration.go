@@ -1,6 +1,5 @@
-// Package migration 定义数据库 migration 的执行边界。
-//
-// 当前 package 暂不包含数据库 Driver 或业务 migration。
+// Package migration 定义数据库 migration 的命名、注册和执行边界。
+// 具体数据库连接和业务 schema 由 Infrastructure package 实现。
 package migration
 
 import (

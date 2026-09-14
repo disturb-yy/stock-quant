@@ -4,11 +4,12 @@ package api
 type ErrorCode string
 
 const (
-	CodeNotFound          ErrorCode = "NOT_FOUND"
-	CodeMethodNotAllowed  ErrorCode = "METHOD_NOT_ALLOWED"
-	CodeValidation        ErrorCode = "VALIDATION_ERROR"
-	CodeInvalidPagination ErrorCode = "INVALID_PAGINATION"
-	CodeInternal          ErrorCode = "INTERNAL_ERROR"
+	CodeNotFound              ErrorCode = "NOT_FOUND"
+	CodeMethodNotAllowed      ErrorCode = "METHOD_NOT_ALLOWED"
+	CodeValidation            ErrorCode = "VALIDATION_ERROR"
+	CodeInvalidPagination     ErrorCode = "INVALID_PAGINATION"
+	CodeInternal              ErrorCode = "INTERNAL_ERROR"
+	CodeDependencyUnavailable ErrorCode = "DEPENDENCY_UNAVAILABLE"
 )
 
 // ErrorResponse 是 API 错误响应的统一 DTO。

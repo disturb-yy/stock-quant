@@ -148,6 +148,24 @@ curl -i http://127.0.0.1:8357/api/v1/health
 
 健康接口成功返回 HTTP `200` 和 `{"status":"ok"}`。`HTTP_ADDRESS` 缺失时使用 `:8357`；地址格式错误或端口被占用时，启动日志会输出具体地址和底层错误。
 
+## FND-003 本地 Demo
+
+从后端工作区执行下面一条命令会启动 Docker MySQL、幂等执行 migration + seed、启动后端和前端：
+
+```bash
+cd /home/jadon/projects/go/stock-quant && ./scripts/dev/start.sh
+```
+
+默认地址为：MySQL `127.0.0.1:3307`、后端 `http://127.0.0.1:8357`、前端 `http://127.0.0.1:4173`。脚本显式设置 `VITE_API_PROXY_TARGET=http://127.0.0.1:8357`；按 `Ctrl-C` 会停止后端、前端并停止本地 MySQL 容器，数据卷保留以便下次复用。
+
+单独执行 seed：
+
+```bash
+DB_HOST=127.0.0.1 DB_PORT=3307 DB_NAME=stock_quant_dev DB_USER=stock_quant DB_PASSWORD=stock_quant_dev go run ./cmd/seed
+```
+
+开发状态接口为 `GET http://127.0.0.1:8357/api/v1/dev/demo-status`，OpenAPI 为 `GET http://127.0.0.1:8357/api/v1/openapi.json`。`mode=demo` 表示数据库中 fixture 版本和三类计数完全匹配；`mode=fallback` 表示尚未 seed 或请求了当前未实现的真实 Provider；`mode=real` 为未来真实 Provider 实现保留，当前不会被伪装返回。
+
 ## 静态检查
 
 ```bash

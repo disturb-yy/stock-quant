@@ -25,6 +25,7 @@
 | `internal/auth` | 身份认证与授权领域 |
 | `internal/health` | 跨领域健康 HTTP 接口适配 |
 | `internal/migration` | 数据库 migration 命名与执行边界 |
+| `internal/demo` | 开发环境 demo-status、fixture seed 用例与 MySQL Infrastructure |
 | `pkg/api` | 跨领域 API 契约、错误模型和分页约定 |
 | `pkg/config` | 配置加载 |
 | `pkg/logger` | 通用日志能力 |
@@ -115,6 +116,8 @@ internal/auth/
 | 修改指标计算规则 | `internal/analysis/domain` |
 | 修改登录流程 | `internal/auth` |
 | 修改启动和依赖注入 | `cmd/server` |
+| 修改本地 demo fixture 或 seed | `internal/demo`、`cmd/seed` |
+| 修改 MySQL schema 或 demo 数据存储 | `internal/demo/infrastructure` |
 | 修改配置解析 | `pkg/config` |
 | 修改日志 | `pkg/logger` |
 

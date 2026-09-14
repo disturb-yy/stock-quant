@@ -37,3 +37,14 @@ loader.go
 | `LOG_FORMAT` | 随 `APP_ENV` 决定 | 显式设为 `text` 或 `json` 时覆盖环境默认值，大小写不敏感。 |
 | `LOG_OUTPUT` | `console` | 日志输出位置，支持 `console` 或 `file`，大小写不敏感。 |
 | `LOG_DIR` | `logs` | `LOG_OUTPUT=file` 时使用的日志目录；文件名为 `<SERVICE_NAME>.log`，目录必须可写。 |
+
+## Database Environment Variables
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `DB_HOST` | `127.0.0.1` | MySQL 地址。 |
+| `DB_PORT` | `3307` | 本地编排映射的 MySQL 端口。 |
+| `DB_NAME` | `stock_quant_dev` | 本地数据库名。 |
+| `DB_USER` | `stock_quant` | 本地数据库用户。 |
+| `DB_PASSWORD` | `stock_quant_dev` | 本地数据库密码；部署时通过安全配置覆盖。 |
+| `DATA_PROVIDER` | `demo` | `demo` 使用版本化 fixture；`real` 当前明确回退为 local fixture。 |

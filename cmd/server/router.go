@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"strings"
 
-	"example.com/stock-ddd/internal/health"
-	"example.com/stock-ddd/pkg/api"
-	"example.com/stock-ddd/pkg/logger"
+	"github.com/disturb-yy/stock-quant/internal/demo"
+	"github.com/disturb-yy/stock-quant/internal/health"
+	"github.com/disturb-yy/stock-quant/pkg/api"
+	"github.com/disturb-yy/stock-quant/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,29 +17,35 @@ const (
 	apiV1Prefix = "/api/v1"
 )
 
-func newRouter(applicationLogger *slog.Logger) *gin.Engine {
+func newRouter(applicationLogger *slog.Logger, statusReaders ...demo.StatusReader) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(logger.GinMiddleware(applicationLogger), gin.CustomRecovery(apiV1RecoveryHandler))
 
 	apiV1 := router.Group(apiV1Prefix)
-	apiV1.GET("/openapi.json", openAPIHandler)
+	includeDevelopment := len(statusReaders) > 0 && statusReaders[0] != nil
+	apiV1.GET("/openapi.json", func(context *gin.Context) {
+		openAPIHandler(context, includeDevelopment)
+	})
 	health.RegisterRoutes(apiV1)
+	if len(statusReaders) > 0 {
+		demo.RegisterRoutes(apiV1, statusReaders[0])
+	}
 
 	router.NoRoute(apiV1NoRouteHandler)
 	router.NoMethod(apiV1NoMethodHandler)
 	return router
 }
 
-func newHTTPServer(applicationLogger *slog.Logger, address string) *http.Server {
+func newHTTPServer(applicationLogger *slog.Logger, address string, statusReaders ...demo.StatusReader) *http.Server {
 	return &http.Server{
 		Addr:    address,
-		Handler: newRouter(applicationLogger),
+		Handler: newRouter(applicationLogger, statusReaders...),
 	}
 }
 
-func openAPIHandler(context *gin.Context) {
-	context.JSON(http.StatusOK, api.OpenAPIDocument())
+func openAPIHandler(context *gin.Context, includeDevelopment bool) {
+	context.JSON(http.StatusOK, api.OpenAPIDocument(includeDevelopment))
 }
 
 func apiV1RecoveryHandler(context *gin.Context, _ any) {

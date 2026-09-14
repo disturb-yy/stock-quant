@@ -39,9 +39,23 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 			t.Fatalf("OpenAPI paths missing %q", path)
 		}
 	}
-	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse"} {
+	if _, ok := document.Paths["/api/v1/dev/demo-status"]; !ok {
+		t.Fatal("OpenAPI paths missing development demo status")
+	}
+	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus"} {
 		if _, ok := document.Components.Schemas[schema]; !ok {
 			t.Fatalf("OpenAPI schemas missing %q", schema)
 		}
+	}
+}
+
+func TestOpenAPIDocumentOmitsDevelopmentPathWhenDisabled(t *testing.T) {
+	document := OpenAPIDocument(false)
+	paths, ok := document["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("OpenAPI paths have unexpected type")
+	}
+	if _, ok := paths["/api/v1/dev/demo-status"]; ok {
+		t.Fatal("production OpenAPI must omit development demo status")
 	}
 }

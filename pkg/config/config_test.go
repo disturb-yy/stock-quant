@@ -30,6 +30,31 @@ func TestLoadServiceName(t *testing.T) {
 	}
 }
 
+func TestLoadEnvironmentAndProvider(t *testing.T) {
+	t.Setenv("APP_ENV", "Staging")
+	t.Setenv("DATA_PROVIDER", "REAL")
+
+	if got := LoadEnvironment(); got != "staging" {
+		t.Fatalf("LoadEnvironment() = %q, want %q", got, "staging")
+	}
+	if got := LoadDataProvider(); got != "real" {
+		t.Fatalf("LoadDataProvider() = %q, want %q", got, "real")
+	}
+}
+
+func TestLoadDatabase(t *testing.T) {
+	t.Setenv("DB_HOST", "db.example")
+	t.Setenv("DB_PORT", "3306")
+	t.Setenv("DB_NAME", "quant")
+	t.Setenv("DB_USER", "reader")
+	t.Setenv("DB_PASSWORD", "secret")
+
+	want := Database{Host: "db.example", Port: "3306", Name: "quant", User: "reader", Password: "secret"}
+	if got := LoadDatabase(); got != want {
+		t.Fatalf("LoadDatabase() = %#v, want %#v", got, want)
+	}
+}
+
 func TestLoadHTTPAddress(t *testing.T) {
 	tests := []struct {
 		name    string
