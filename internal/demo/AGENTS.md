@@ -10,6 +10,7 @@
 
 - 编排版本化 fixture seed。
 - 编排真实数据库状态查询。
+- 为依赖它的领域提供版本化 Seed 数据落库。
 - 注册仅 development 环境使用的 demo-status HTTP 路由。
 
 禁止：

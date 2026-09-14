@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/disturb-yy/stock-quant/internal/demo"
 	"github.com/disturb-yy/stock-quant/internal/demo/infrastructure"
+	"github.com/disturb-yy/stock-quant/internal/market"
+	marketinfrastructure "github.com/disturb-yy/stock-quant/internal/market/infrastructure"
 	"github.com/disturb-yy/stock-quant/pkg/config"
 	"github.com/disturb-yy/stock-quant/pkg/logger"
 )
@@ -34,16 +37,21 @@ func run(ctx context.Context) error {
 	defer closeLogOutput(logOutput)
 
 	applicationLogger.Info("application logger initialized")
-	demoStore, err := openDemoStore(ctx)
+	database, err := openDemoDatabase(ctx)
 	if err != nil {
 		applicationLogger.Error("open database", "error", err)
 		return err
 	}
 	defer func() {
-		if err := demoStore.Close(); err != nil {
+		if err := database.Close(); err != nil {
 			applicationLogger.Error("close database", "error", err)
 		}
 	}()
+	demoStore, err := infrastructure.NewStore(database)
+	if err != nil {
+		applicationLogger.Error("initialize demo store", "error", err)
+		return err
+	}
 	if err := initializeMigrations(ctx, demoStore, applicationLogger); err != nil {
 		applicationLogger.Error("initialize database migrations", "error", err)
 		return err
@@ -54,7 +62,20 @@ func run(ctx context.Context) error {
 		applicationLogger.Error("initialize demo status service", "error", err)
 		return err
 	}
-	server := newHTTPServer(applicationLogger, httpAddress, statusReader)
+	overviewReader, err := marketinfrastructure.NewMySQLOverviewReader(database)
+	if err != nil {
+		applicationLogger.Error("initialize market overview reader", "error", err)
+		return err
+	}
+	overviewService, err := market.NewOverviewService(
+		overviewReader,
+		market.SelectProvider(config.LoadDataProvider(), true),
+	)
+	if err != nil {
+		applicationLogger.Error("initialize market overview service", "error", err)
+		return err
+	}
+	server := newHTTPServerWithOverview(applicationLogger, httpAddress, overviewService, statusReader)
 	applicationLogger.Info("HTTP server starting", "address", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		applicationLogger.Error("HTTP server stopped", "error", err)
@@ -96,19 +117,12 @@ func closeLogOutput(logOutput io.WriteCloser) {
 	}
 }
 
-func openDemoStore(ctx context.Context) (*infrastructure.Store, error) {
+func openDemoDatabase(ctx context.Context) (*sql.DB, error) {
 	database, err := infrastructure.Open(ctx, config.LoadDatabase())
 	if err != nil {
 		return nil, err
 	}
-	demoStore, err := infrastructure.NewStore(database)
-	if err != nil {
-		if closeErr := database.Close(); closeErr != nil {
-			return nil, fmt.Errorf("initialize demo store: %w; close database: %v", err, closeErr)
-		}
-		return nil, fmt.Errorf("initialize demo store: %w", err)
-	}
-	return demoStore, nil
+	return database, nil
 }
 
 func newStatusReader(environment string, store demo.StatusStore) (demo.StatusReader, error) {

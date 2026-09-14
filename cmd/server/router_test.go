@@ -57,6 +57,37 @@ func (reader fakeDemoStatusReader) DemoStatus(context.Context) (demo.DemoStatus,
 	return reader.status, nil
 }
 
+type fakeMarketOverviewReader struct {
+	overview market.MarketOverview
+	err      error
+}
+
+func (reader fakeMarketOverviewReader) Overview(context.Context) (market.MarketOverview, error) {
+	return reader.overview, reader.err
+}
+
+func TestNewRouterRegistersMarketOverview(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	applicationLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	router := newRouterWithOverview(applicationLogger, fakeMarketOverviewReader{
+		overview: market.MarketOverview{
+			AsOf: "2024-06-28", ObservedAt: "2024-06-28T07:00:00Z",
+			Breadth: market.BreadthOverview{Advancing: 2, Declining: 1},
+		},
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/markets/overview", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if !strings.Contains(response.Body.String(), `"as_of":"2024-06-28"`) {
+		t.Fatalf("response = %q, want market overview", response.Body.String())
+	}
+}
+
 func TestNewRouterRegistersDevelopmentDemoStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	applicationLogger := slog.New(slog.NewTextHandler(io.Discard, nil))

@@ -25,8 +25,9 @@ func apiInfo() map[string]any {
 
 func apiPaths(includeDevelopment bool) map[string]any {
 	paths := map[string]any{
-		"/api/v1/health":       healthPath(),
-		"/api/v1/openapi.json": openAPIPath(),
+		"/api/v1/health":           healthPath(),
+		"/api/v1/markets/overview": marketOverviewPath(),
+		"/api/v1/openapi.json":     openAPIPath(),
 	}
 	if includeDevelopment {
 		paths["/api/v1/dev/demo-status"] = demoStatusPath()
@@ -86,6 +87,21 @@ func demoStatusPath() map[string]any {
 	}
 }
 
+func marketOverviewPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "getMarketOverview",
+			"summary":     "读取市场概览",
+			"responses": map[string]any{
+				"200": jsonReferenceResponse("市场概览", "#/components/schemas/MarketOverview"),
+				"404": errorResponse("请求的资源不存在"),
+				"405": errorResponse("请求方法不被允许"),
+				"503": errorResponse("市场概览数据不可用"),
+			},
+		},
+	}
+}
+
 func jsonReferenceResponse(description, reference string) map[string]any {
 	return map[string]any{
 		"description": description,
@@ -109,6 +125,11 @@ func apiComponents() map[string]any {
 			"DemoCounts":        demoCountsSchema(),
 			"DemoSampleStock":   demoSampleStockSchema(),
 			"DemoStatus":        demoStatusSchema(),
+			"MarketOverview":    marketOverviewSchema(),
+			"MarketDataSource":  marketDataSourceSchema(),
+			"MarketIndex":       marketIndexSchema(),
+			"MarketBreadth":     marketBreadthSchema(),
+			"MarketTurnover":    marketTurnoverSchema(),
 		},
 	}
 }
@@ -204,11 +225,12 @@ func healthSchema() map[string]any {
 func demoCountsSchema() map[string]any {
 	return map[string]any{
 		"type":     "object",
-		"required": []string{"instruments", "daily_bars", "financial_metrics"},
+		"required": []string{"instruments", "daily_bars", "financial_metrics", "index_snapshots"},
 		"properties": map[string]any{
 			"instruments":       map[string]any{"type": "integer", "format": "int64", "minimum": 0},
 			"daily_bars":        map[string]any{"type": "integer", "format": "int64", "minimum": 0},
 			"financial_metrics": map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"index_snapshots":   map[string]any{"type": "integer", "format": "int64", "minimum": 0},
 		},
 	}
 }
@@ -239,13 +261,86 @@ func demoStatusSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
 			},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v1"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v2"},
 			"as_of":        map[string]any{"type": "string", "format": "date", "nullable": true, "example": "2024-06-28"},
 			"counts":       map[string]any{"$ref": "#/components/schemas/DemoCounts"},
 			"sample_stocks": map[string]any{
 				"type":  "array",
 				"items": map[string]any{"$ref": "#/components/schemas/DemoSampleStock"},
 			},
+		},
+	}
+}
+
+func marketOverviewSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"as_of", "observed_at", "source", "indices", "breadth", "turnover"},
+		"properties": map[string]any{
+			"as_of":       map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
+			"observed_at": map[string]any{"type": "string", "format": "date-time", "example": "2024-06-28T07:00:00Z"},
+			"source":      map[string]any{"$ref": "#/components/schemas/MarketDataSource"},
+			"indices": map[string]any{
+				"type":  "array",
+				"items": map[string]any{"$ref": "#/components/schemas/MarketIndex"},
+			},
+			"breadth":  map[string]any{"$ref": "#/components/schemas/MarketBreadth"},
+			"turnover": map[string]any{"$ref": "#/components/schemas/MarketTurnover"},
+		},
+	}
+}
+
+func marketDataSourceSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"mode", "provider", "seed_version"},
+		"properties": map[string]any{
+			"mode": map[string]any{
+				"type": "string",
+				"enum": []string{"demo", "real", "fallback"},
+			},
+			"provider": map[string]any{
+				"type": "string",
+				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
+			},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v2"},
+		},
+	}
+}
+
+func marketIndexSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"code", "name", "close", "change", "change_percent"},
+		"properties": map[string]any{
+			"code":           map[string]any{"type": "string", "example": "000001.SH"},
+			"name":           map[string]any{"type": "string", "example": "上证指数"},
+			"close":          map[string]any{"type": "string", "example": "2994.73"},
+			"change":         map[string]any{"type": "string", "example": "-3.89"},
+			"change_percent": map[string]any{"type": "string", "example": "-0.13"},
+		},
+	}
+}
+
+func marketBreadthSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"advancing", "declining", "unchanged"},
+		"properties": map[string]any{
+			"advancing": map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"declining": map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"unchanged": map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+		},
+	}
+}
+
+func marketTurnoverSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"amount", "currency"},
+		"properties": map[string]any{
+			"amount":   map[string]any{"type": "string", "example": "12002494200.00"},
+			"currency": map[string]any{"type": "string", "enum": []string{"CNY"}},
 		},
 	}
 }

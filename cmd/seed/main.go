@@ -50,5 +50,6 @@ func run(ctx context.Context) error {
 		"instruments":       snapshot.Counts.Instruments,
 		"daily_bars":        snapshot.Counts.DailyBars,
 		"financial_metrics": snapshot.Counts.FinancialMetrics,
+		"index_snapshots":   snapshot.Counts.IndexSnapshots,
 	})
 }

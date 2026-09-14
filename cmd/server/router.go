@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/disturb-yy/stock-quant/internal/demo"
 	"github.com/disturb-yy/stock-quant/internal/health"
+	"github.com/disturb-yy/stock-quant/internal/market"
 	"github.com/disturb-yy/stock-quant/pkg/api"
 	"github.com/disturb-yy/stock-quant/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -18,6 +20,12 @@ const (
 )
 
 func newRouter(applicationLogger *slog.Logger, statusReaders ...demo.StatusReader) *gin.Engine {
+	return newRouterWithOverview(applicationLogger, nil, statusReaders...)
+}
+
+func newRouterWithOverview(applicationLogger *slog.Logger, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, statusReaders ...demo.StatusReader) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(logger.GinMiddleware(applicationLogger), gin.CustomRecovery(apiV1RecoveryHandler))
@@ -28,6 +36,7 @@ func newRouter(applicationLogger *slog.Logger, statusReaders ...demo.StatusReade
 		openAPIHandler(context, includeDevelopment)
 	})
 	health.RegisterRoutes(apiV1)
+	market.RegisterRoutes(apiV1, overviewReader)
 	if len(statusReaders) > 0 {
 		demo.RegisterRoutes(apiV1, statusReaders[0])
 	}
@@ -41,6 +50,15 @@ func newHTTPServer(applicationLogger *slog.Logger, address string, statusReaders
 	return &http.Server{
 		Addr:    address,
 		Handler: newRouter(applicationLogger, statusReaders...),
+	}
+}
+
+func newHTTPServerWithOverview(applicationLogger *slog.Logger, address string, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, statusReaders ...demo.StatusReader) *http.Server {
+	return &http.Server{
+		Addr:    address,
+		Handler: newRouterWithOverview(applicationLogger, overviewReader, statusReaders...),
 	}
 }
 

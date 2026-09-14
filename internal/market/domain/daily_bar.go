@@ -15,6 +15,7 @@ type DailyBar struct {
 	Low            string
 	Close          string
 	Volume         int64
+	TurnoverAmount string
 }
 
 // Validate 检查 DailyBar 的最小领域约束。
@@ -34,6 +35,9 @@ func (bar DailyBar) Validate() error {
 	}
 	if bar.Volume < 0 {
 		return errors.New("daily bar volume must not be negative")
+	}
+	if strings.TrimSpace(bar.TurnoverAmount) == "" {
+		return errors.New("daily bar turnover amount is required")
 	}
 	return nil
 }

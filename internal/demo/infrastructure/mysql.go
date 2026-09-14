@@ -16,7 +16,10 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-const migrationName = "0001_demo_seed"
+const (
+	migrationName           = "0001_demo_seed"
+	marketOverviewMigration = "0002_market_overview"
+)
 
 const createSchemaMigrationsSQL = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -44,11 +47,11 @@ var demoSchemaStatements = []string{
         high_price DECIMAL(20,6) NOT NULL,
         low_price DECIMAL(20,6) NOT NULL,
         close_price DECIMAL(20,6) NOT NULL,
-        volume BIGINT UNSIGNED NOT NULL,
+		volume BIGINT UNSIGNED NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uk_daily_bars_instrument_date (instrument_code, trade_date),
-        CONSTRAINT fk_daily_bars_instrument FOREIGN KEY (instrument_code) REFERENCES instruments (code)
+		CONSTRAINT fk_daily_bars_instrument FOREIGN KEY (instrument_code) REFERENCES instruments (code)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	`CREATE TABLE IF NOT EXISTS financial_metrics (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -69,6 +72,26 @@ var demoSchemaStatements = []string{
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 }
+
+const marketOverviewSchemaSQL = `
+ALTER TABLE daily_bars
+    ADD COLUMN turnover_amount DECIMAL(20,6) NOT NULL DEFAULT 0 AFTER volume,
+    ADD INDEX idx_daily_bars_trade_date (trade_date, instrument_code)`
+
+const createIndexSnapshotsSQL = `
+CREATE TABLE IF NOT EXISTS index_snapshots (
+    code VARCHAR(32) NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    trade_date DATE NOT NULL,
+    observed_at DATETIME NOT NULL,
+    close_price DECIMAL(20,6) NOT NULL,
+    change_amount DECIMAL(20,6) NOT NULL,
+    change_percent DECIMAL(20,6) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (code, trade_date),
+    INDEX idx_index_snapshots_trade_date (trade_date, code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
 
 // Open 连接并探测 MySQL；密码只进入 Driver DSN，不写入错误信息。
 func Open(ctx context.Context, settings config.Database) (*sql.DB, error) {
@@ -101,7 +124,7 @@ func Open(ctx context.Context, settings config.Database) (*sql.DB, error) {
 	return db, nil
 }
 
-// Store 是三类 fixture 数据和状态元数据的 MySQL 存储实现。
+// Store 是四类 fixture 数据和状态元数据的 MySQL 存储实现。
 type Store struct {
 	db *sql.DB
 }
@@ -121,7 +144,10 @@ func (store *Store) Close() error {
 
 // Migrate 按版本执行演示数据 schema migration。
 func (store *Store) Migrate(ctx context.Context) error {
-	runner, err := migration.NewRunner(schemaMigration{db: store.db})
+	runner, err := migration.NewRunner(
+		schemaMigration{db: store.db},
+		marketOverviewSchemaMigration{db: store.db},
+	)
 	if err != nil {
 		return fmt.Errorf("create demo migration runner: %w", err)
 	}
@@ -133,6 +159,34 @@ func (store *Store) Migrate(ctx context.Context) error {
 
 type schemaMigration struct {
 	db *sql.DB
+}
+
+type marketOverviewSchemaMigration struct {
+	db *sql.DB
+}
+
+func (migration marketOverviewSchemaMigration) Name() string {
+	return marketOverviewMigration
+}
+
+func (migration marketOverviewSchemaMigration) Up(ctx context.Context) error {
+	var applied int
+	if err := migration.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, marketOverviewMigration).Scan(&applied); err != nil {
+		return fmt.Errorf("check migration %q: %w", marketOverviewMigration, err)
+	}
+	if applied > 0 {
+		return nil
+	}
+	if _, err := migration.db.ExecContext(ctx, marketOverviewSchemaSQL); err != nil {
+		return fmt.Errorf("add market overview daily bar fields: %w", err)
+	}
+	if _, err := migration.db.ExecContext(ctx, createIndexSnapshotsSQL); err != nil {
+		return fmt.Errorf("create index snapshots table: %w", err)
+	}
+	if _, err := migration.db.ExecContext(ctx, `INSERT INTO schema_migrations (name) VALUES (?)`, marketOverviewMigration); err != nil {
+		return fmt.Errorf("record migration %q: %w", marketOverviewMigration, err)
+	}
+	return nil
 }
 
 func (migration schemaMigration) Name() string {
@@ -179,7 +233,7 @@ func (migration schemaMigration) Up(ctx context.Context) error {
 	return nil
 }
 
-// SeedDemo 幂等写入三类 fixture 和版本元数据。
+// SeedDemo 幂等写入四类 fixture 和版本元数据。
 func (store *Store) SeedDemo(ctx context.Context, fixture demo.Fixture) error {
 	if err := fixture.Validate(); err != nil {
 		return fmt.Errorf("validate fixture in MySQL store: %w", err)
@@ -198,6 +252,9 @@ func (store *Store) SeedDemo(ctx context.Context, fixture demo.Fixture) error {
 		return err
 	}
 	if err := seedDailyBars(ctx, tx, fixture); err != nil {
+		return err
+	}
+	if err := seedIndexSnapshots(ctx, tx, fixture); err != nil {
 		return err
 	}
 	if err := seedFinancialMetrics(ctx, tx, fixture); err != nil {
@@ -230,15 +287,41 @@ func seedInstruments(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) erro
 func seedDailyBars(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) error {
 	for _, bar := range fixture.DailyBars {
 		_, err := tx.ExecContext(ctx, `
-            INSERT INTO daily_bars (instrument_code, trade_date, open_price, high_price, low_price, close_price, volume)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE open_price = VALUES(open_price), high_price = VALUES(high_price), low_price = VALUES(low_price), close_price = VALUES(close_price), volume = VALUES(volume)`,
-			bar.InstrumentCode, bar.TradeDate, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume)
+            INSERT INTO daily_bars (instrument_code, trade_date, open_price, high_price, low_price, close_price, volume, turnover_amount)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE open_price = VALUES(open_price), high_price = VALUES(high_price), low_price = VALUES(low_price), close_price = VALUES(close_price), volume = VALUES(volume), turnover_amount = VALUES(turnover_amount)`,
+			bar.InstrumentCode, bar.TradeDate, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.TurnoverAmount)
 		if err != nil {
 			return fmt.Errorf("upsert daily bar %q/%q: %w", bar.InstrumentCode, bar.TradeDate, err)
 		}
 	}
 	return nil
+}
+
+func seedIndexSnapshots(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) error {
+	for _, index := range fixture.IndexSnapshots {
+		observedAt, err := mysqlDateTime(index.ObservedAt)
+		if err != nil {
+			return fmt.Errorf("parse index snapshot observation %q/%q: %w", index.Code, index.TradeDate, err)
+		}
+		_, err = tx.ExecContext(ctx, `
+            INSERT INTO index_snapshots (code, name, trade_date, observed_at, close_price, change_amount, change_percent)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE name = VALUES(name), observed_at = VALUES(observed_at), close_price = VALUES(close_price), change_amount = VALUES(change_amount), change_percent = VALUES(change_percent)`,
+			index.Code, index.Name, index.TradeDate, observedAt, index.Close, index.Change, index.ChangePercent)
+		if err != nil {
+			return fmt.Errorf("upsert index snapshot %q/%q: %w", index.Code, index.TradeDate, err)
+		}
+	}
+	return nil
+}
+
+func mysqlDateTime(value string) (string, error) {
+	observedAt, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return "", fmt.Errorf("parse RFC3339 timestamp: %w", err)
+	}
+	return observedAt.UTC().Format("2006-01-02 15:04:05"), nil
 }
 
 func seedFinancialMetrics(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) error {
@@ -277,6 +360,9 @@ func (store *Store) ReadDemoSnapshot(ctx context.Context) (demo.StoreSnapshot, e
 	}
 	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM financial_metrics`).Scan(&snapshot.Counts.FinancialMetrics); err != nil {
 		return demo.StoreSnapshot{}, fmt.Errorf("count financial metrics: %w", err)
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM index_snapshots`).Scan(&snapshot.Counts.IndexSnapshots); err != nil {
+		return demo.StoreSnapshot{}, fmt.Errorf("count index snapshots: %w", err)
 	}
 	var asOf string
 	err := store.db.QueryRowContext(ctx, `SELECT seed_version, DATE_FORMAT(as_of, '%Y-%m-%d') FROM demo_seed_metadata WHERE seed_name = ?`, demo.SeedName).Scan(&snapshot.SeedVersion, &asOf)
