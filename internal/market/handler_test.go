@@ -18,6 +18,15 @@ type fakeOverviewQuery struct {
 	err      error
 }
 
+type fakeSectorQuery struct {
+	sectors MarketSectors
+	err     error
+}
+
+func (query fakeSectorQuery) Sectors(context.Context) (MarketSectors, error) {
+	return query.sectors, query.err
+}
+
 func (query fakeOverviewQuery) Overview(context.Context) (MarketOverview, error) {
 	return query.overview, query.err
 }
@@ -54,6 +63,54 @@ func TestRegisterRoutesReturnsSafeDependencyError(t *testing.T) {
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/markets/overview", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if strings.Contains(response.Body.String(), "secret database detail") {
+		t.Fatal("dependency error must not be exposed")
+	}
+	var body api.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if body.Code != api.CodeDependencyUnavailable {
+		t.Fatalf("error code = %q, want %q", body.Code, api.CodeDependencyUnavailable)
+	}
+}
+
+func TestRegisterSectorRoutesReturnsMarketSectors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterSectorRoutes(router.Group("/api/v1"), fakeSectorQuery{sectors: MarketSectors{
+		AsOf: "2024-06-28", Source: DataSource{Mode: ModeDemo, Provider: DemoProviderName, SeedVersion: "mkt-002-demo-v1"},
+		Sectors: []SectorOverview{{Code: "BANK", Name: "银行", ChangePercent: "0.88", ComponentCount: 1, Leader: SectorLeaderOverview{Code: "000001.SZ", Name: "平安银行", ChangePercent: "0.88"}}},
+	}})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/markets/sectors", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	var body MarketSectors
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.AsOf != "2024-06-28" || len(body.Sectors) != 1 || body.Sectors[0].Leader.Code != "000001.SZ" {
+		t.Fatalf("body = %#v, want market sectors", body)
+	}
+}
+
+func TestRegisterSectorRoutesReturnsSafeDependencyError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterSectorRoutes(router.Group("/api/v1"), fakeSectorQuery{err: errors.New("secret database detail")})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/markets/sectors", nil)
 	router.ServeHTTP(response, request)
 
 	if response.Code != http.StatusServiceUnavailable {

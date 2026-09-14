@@ -62,6 +62,14 @@ type fakeMarketOverviewReader struct {
 	err      error
 }
 
+type fakeMarketSectorReader struct {
+	sectors market.MarketSectors
+}
+
+func (reader fakeMarketSectorReader) Sectors(context.Context) (market.MarketSectors, error) {
+	return reader.sectors, nil
+}
+
 func (reader fakeMarketOverviewReader) Overview(context.Context) (market.MarketOverview, error) {
 	return reader.overview, reader.err
 }
@@ -85,6 +93,26 @@ func TestNewRouterRegistersMarketOverview(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), `"as_of":"2024-06-28"`) {
 		t.Fatalf("response = %q, want market overview", response.Body.String())
+	}
+}
+
+func TestNewRouterRegistersMarketSectors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	applicationLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	router := newRouterWithMarket(applicationLogger, nil, fakeMarketSectorReader{sectors: market.MarketSectors{
+		AsOf:    "2024-06-28",
+		Sectors: []market.SectorOverview{{Code: "BANK", Name: "银行", ChangePercent: "0.88", ComponentCount: 1}},
+	}})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/markets/sectors", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if !strings.Contains(response.Body.String(), `"code":"BANK"`) {
+		t.Fatalf("response = %q, want market sectors", response.Body.String())
 	}
 }
 
@@ -168,7 +196,7 @@ func TestOpenAPIEndpointOverHTTP(t *testing.T) {
 	if document.OpenAPI != "3.0.3" {
 		t.Fatalf("openapi = %q, want %q", document.OpenAPI, "3.0.3")
 	}
-	for _, path := range []string{"/api/v1/health", "/api/v1/openapi.json"} {
+	for _, path := range []string{"/api/v1/health", "/api/v1/markets/sectors", "/api/v1/openapi.json"} {
 		if _, ok := document.Paths[path]; !ok {
 			t.Fatalf("OpenAPI response missing path %q", path)
 		}

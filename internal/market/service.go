@@ -36,7 +36,7 @@ type OverviewReader interface {
 	ReadOverviewSnapshot(context.Context) (OverviewSnapshot, error)
 }
 
-// DataSource 描述概览数据的来源，避免 Seed 数据被误认为实时数据。
+// DataSource 描述市场数据的来源，避免 Seed 数据被误认为实时数据。
 type DataSource struct {
 	Mode        ProviderMode `json:"mode"`
 	Provider    string       `json:"provider"`

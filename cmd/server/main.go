@@ -67,15 +67,21 @@ func run(ctx context.Context) error {
 		applicationLogger.Error("initialize market overview reader", "error", err)
 		return err
 	}
+	providerSelection := market.SelectProvider(config.LoadDataProvider(), true)
 	overviewService, err := market.NewOverviewService(
 		overviewReader,
-		market.SelectProvider(config.LoadDataProvider(), true),
+		providerSelection,
 	)
 	if err != nil {
 		applicationLogger.Error("initialize market overview service", "error", err)
 		return err
 	}
-	server := newHTTPServerWithOverview(applicationLogger, httpAddress, overviewService, statusReader)
+	sectorService, err := market.NewSectorService(overviewReader, providerSelection)
+	if err != nil {
+		applicationLogger.Error("initialize market sector service", "error", err)
+		return err
+	}
+	server := newHTTPServerWithMarket(applicationLogger, httpAddress, overviewService, sectorService, statusReader)
 	applicationLogger.Info("HTTP server starting", "address", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		applicationLogger.Error("HTTP server stopped", "error", err)

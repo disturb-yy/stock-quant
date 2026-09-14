@@ -32,8 +32,25 @@ func TestMySQLOverviewReader(t *testing.T) {
 	if err := store.Migrate(context.Background()); err != nil {
 		t.Fatalf("migration: %v", err)
 	}
-	if err := store.SeedDemo(context.Background(), demo.DemoFixture()); err != nil {
+	if err := store.Migrate(context.Background()); err != nil {
+		t.Fatalf("repeat migration: %v", err)
+	}
+	fixture := demo.DemoFixture()
+	if err := store.SeedDemo(context.Background(), fixture); err != nil {
 		t.Fatalf("seed: %v", err)
+	}
+	if err := store.SeedDemo(context.Background(), fixture); err != nil {
+		t.Fatalf("repeat seed: %v", err)
+	}
+	var sectorCount, membershipCount int64
+	if err := database.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM sector_categories`).Scan(&sectorCount); err != nil {
+		t.Fatalf("count sector categories: %v", err)
+	}
+	if err := database.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM sector_memberships`).Scan(&membershipCount); err != nil {
+		t.Fatalf("count sector memberships: %v", err)
+	}
+	if sectorCount != int64(len(fixture.Sectors)) || membershipCount != int64(len(fixture.SectorMemberships)) {
+		t.Fatalf("sector seed counts = %d/%d, want %d/%d", sectorCount, membershipCount, len(fixture.Sectors), len(fixture.SectorMemberships))
 	}
 	reader, err := NewMySQLOverviewReader(database)
 	if err != nil {
@@ -58,5 +75,29 @@ func TestMySQLOverviewReader(t *testing.T) {
 	}
 	if _, err := service.Overview(context.Background()); err != nil {
 		t.Fatalf("Overview() error = %v", err)
+	}
+	sectorSnapshot, err := reader.ReadSectorSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("ReadSectorSnapshot() error = %v", err)
+	}
+	if sectorSnapshot.AsOf != demo.SeedAsOf || sectorSnapshot.SeedVersion != demo.SeedVersion || len(sectorSnapshot.Components) != len(fixture.SectorMemberships) {
+		t.Fatalf("sector snapshot = %#v, want seeded latest sector components", sectorSnapshot)
+	}
+	sectorService, err := market.NewSectorService(reader, market.ProviderSelection{Mode: market.ModeDemo, Provider: market.DemoProviderName})
+	if err != nil {
+		t.Fatalf("NewSectorService() error = %v", err)
+	}
+	sectors, err := sectorService.Sectors(context.Background())
+	if err != nil {
+		t.Fatalf("Sectors() error = %v", err)
+	}
+	if len(sectors.Sectors) != 3 {
+		t.Fatalf("sector response count = %d, want 3", len(sectors.Sectors))
+	}
+	wantChanges := map[string]string{"BANK": "0.88", "EQUIPMENT": "1.42", "FOOD_BEVERAGE": "-0.17"}
+	for _, sector := range sectors.Sectors {
+		if sector.ChangePercent != wantChanges[sector.Code] || sector.ComponentCount != 1 || sector.Leader.Code == "" || sector.Leader.Name == "" {
+			t.Fatalf("sector = %#v, want seeded performance and leader", sector)
+		}
 	}
 }

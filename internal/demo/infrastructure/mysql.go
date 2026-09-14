@@ -19,6 +19,7 @@ import (
 const (
 	migrationName           = "0001_demo_seed"
 	marketOverviewMigration = "0002_market_overview"
+	marketSectorsMigration  = "0003_market_sectors"
 )
 
 const createSchemaMigrationsSQL = `
@@ -93,6 +94,26 @@ CREATE TABLE IF NOT EXISTS index_snapshots (
     INDEX idx_index_snapshots_trade_date (trade_date, code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
 
+const createMarketSectorsSQL = `
+CREATE TABLE IF NOT EXISTS sector_categories (
+    code VARCHAR(32) NOT NULL PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+
+const createSectorMembershipsSQL = `
+CREATE TABLE IF NOT EXISTS sector_memberships (
+    sector_code VARCHAR(32) NOT NULL,
+    instrument_code VARCHAR(32) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (sector_code, instrument_code),
+    INDEX idx_sector_memberships_instrument (instrument_code, sector_code),
+    CONSTRAINT fk_sector_memberships_sector FOREIGN KEY (sector_code) REFERENCES sector_categories (code),
+    CONSTRAINT fk_sector_memberships_instrument FOREIGN KEY (instrument_code) REFERENCES instruments (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+
 // Open 连接并探测 MySQL；密码只进入 Driver DSN，不写入错误信息。
 func Open(ctx context.Context, settings config.Database) (*sql.DB, error) {
 	if ctx == nil {
@@ -124,7 +145,7 @@ func Open(ctx context.Context, settings config.Database) (*sql.DB, error) {
 	return db, nil
 }
 
-// Store 是四类 fixture 数据和状态元数据的 MySQL 存储实现。
+// Store 是 fixture 数据和状态元数据的 MySQL 存储实现。
 type Store struct {
 	db *sql.DB
 }
@@ -147,6 +168,7 @@ func (store *Store) Migrate(ctx context.Context) error {
 	runner, err := migration.NewRunner(
 		schemaMigration{db: store.db},
 		marketOverviewSchemaMigration{db: store.db},
+		marketSectorsSchemaMigration{db: store.db},
 	)
 	if err != nil {
 		return fmt.Errorf("create demo migration runner: %w", err)
@@ -162,6 +184,10 @@ type schemaMigration struct {
 }
 
 type marketOverviewSchemaMigration struct {
+	db *sql.DB
+}
+
+type marketSectorsSchemaMigration struct {
 	db *sql.DB
 }
 
@@ -185,6 +211,30 @@ func (migration marketOverviewSchemaMigration) Up(ctx context.Context) error {
 	}
 	if _, err := migration.db.ExecContext(ctx, `INSERT INTO schema_migrations (name) VALUES (?)`, marketOverviewMigration); err != nil {
 		return fmt.Errorf("record migration %q: %w", marketOverviewMigration, err)
+	}
+	return nil
+}
+
+func (migration marketSectorsSchemaMigration) Name() string {
+	return marketSectorsMigration
+}
+
+func (migration marketSectorsSchemaMigration) Up(ctx context.Context) error {
+	var applied int
+	if err := migration.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, marketSectorsMigration).Scan(&applied); err != nil {
+		return fmt.Errorf("check migration %q: %w", marketSectorsMigration, err)
+	}
+	if applied > 0 {
+		return nil
+	}
+	if _, err := migration.db.ExecContext(ctx, createMarketSectorsSQL); err != nil {
+		return fmt.Errorf("create sector categories table: %w", err)
+	}
+	if _, err := migration.db.ExecContext(ctx, createSectorMembershipsSQL); err != nil {
+		return fmt.Errorf("create sector memberships table: %w", err)
+	}
+	if _, err := migration.db.ExecContext(ctx, `INSERT INTO schema_migrations (name) VALUES (?)`, marketSectorsMigration); err != nil {
+		return fmt.Errorf("record migration %q: %w", marketSectorsMigration, err)
 	}
 	return nil
 }
@@ -251,6 +301,12 @@ func (store *Store) SeedDemo(ctx context.Context, fixture demo.Fixture) error {
 	if err := seedInstruments(ctx, tx, fixture); err != nil {
 		return err
 	}
+	if err := seedSectors(ctx, tx, fixture); err != nil {
+		return err
+	}
+	if err := seedSectorMemberships(ctx, tx, fixture); err != nil {
+		return err
+	}
 	if err := seedDailyBars(ctx, tx, fixture); err != nil {
 		return err
 	}
@@ -279,6 +335,34 @@ func seedInstruments(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) erro
 			instrument.Code, instrument.Name, instrument.Exchange, instrument.Status, instrument.AsOf)
 		if err != nil {
 			return fmt.Errorf("upsert instrument %q: %w", instrument.Code, err)
+		}
+	}
+	return nil
+}
+
+func seedSectors(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) error {
+	for _, sector := range fixture.Sectors {
+		_, err := tx.ExecContext(ctx, `
+            INSERT INTO sector_categories (code, name)
+            VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+			sector.Code, sector.Name)
+		if err != nil {
+			return fmt.Errorf("upsert sector %q: %w", sector.Code, err)
+		}
+	}
+	return nil
+}
+
+func seedSectorMemberships(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) error {
+	for _, membership := range fixture.SectorMemberships {
+		_, err := tx.ExecContext(ctx, `
+            INSERT INTO sector_memberships (sector_code, instrument_code)
+            VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE sector_code = VALUES(sector_code)`,
+			membership.SectorCode, membership.InstrumentCode)
+		if err != nil {
+			return fmt.Errorf("upsert sector membership %q/%q: %w", membership.SectorCode, membership.InstrumentCode, err)
 		}
 	}
 	return nil

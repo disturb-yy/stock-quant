@@ -27,6 +27,7 @@ func apiPaths(includeDevelopment bool) map[string]any {
 	paths := map[string]any{
 		"/api/v1/health":           healthPath(),
 		"/api/v1/markets/overview": marketOverviewPath(),
+		"/api/v1/markets/sectors":  marketSectorsPath(),
 		"/api/v1/openapi.json":     openAPIPath(),
 	}
 	if includeDevelopment {
@@ -102,6 +103,21 @@ func marketOverviewPath() map[string]any {
 	}
 }
 
+func marketSectorsPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "getMarketSectors",
+			"summary":     "读取行业表现",
+			"responses": map[string]any{
+				"200": jsonReferenceResponse("行业表现", "#/components/schemas/MarketSectors"),
+				"404": errorResponse("请求的资源不存在"),
+				"405": errorResponse("请求方法不被允许"),
+				"503": errorResponse("行业数据不可用"),
+			},
+		},
+	}
+}
+
 func jsonReferenceResponse(description, reference string) map[string]any {
 	return map[string]any{
 		"description": description,
@@ -126,6 +142,9 @@ func apiComponents() map[string]any {
 			"DemoSampleStock":   demoSampleStockSchema(),
 			"DemoStatus":        demoStatusSchema(),
 			"MarketOverview":    marketOverviewSchema(),
+			"MarketSectors":     marketSectorsSchema(),
+			"MarketSector":      marketSectorSchema(),
+			"SectorLeader":      sectorLeaderSchema(),
 			"MarketDataSource":  marketDataSourceSchema(),
 			"MarketIndex":       marketIndexSchema(),
 			"MarketBreadth":     marketBreadthSchema(),
@@ -261,7 +280,7 @@ func demoStatusSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
 			},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v2"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v3"},
 			"as_of":        map[string]any{"type": "string", "format": "date", "nullable": true, "example": "2024-06-28"},
 			"counts":       map[string]any{"$ref": "#/components/schemas/DemoCounts"},
 			"sample_stocks": map[string]any{
@@ -290,6 +309,44 @@ func marketOverviewSchema() map[string]any {
 	}
 }
 
+func marketSectorsSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"as_of", "source", "sectors"},
+		"properties": map[string]any{
+			"as_of":   map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
+			"source":  map[string]any{"$ref": "#/components/schemas/MarketDataSource"},
+			"sectors": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/MarketSector"}},
+		},
+	}
+}
+
+func marketSectorSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"code", "name", "change_percent", "component_count", "leader"},
+		"properties": map[string]any{
+			"code":            map[string]any{"type": "string", "example": "BANK"},
+			"name":            map[string]any{"type": "string", "example": "银行"},
+			"change_percent":  map[string]any{"type": "string", "example": "0.88"},
+			"component_count": map[string]any{"type": "integer", "format": "int64", "minimum": 1},
+			"leader":          map[string]any{"$ref": "#/components/schemas/SectorLeader"},
+		},
+	}
+}
+
+func sectorLeaderSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"code", "name", "change_percent"},
+		"properties": map[string]any{
+			"code":           map[string]any{"type": "string", "example": "000001.SZ"},
+			"name":           map[string]any{"type": "string", "example": "平安银行"},
+			"change_percent": map[string]any{"type": "string", "example": "0.88"},
+		},
+	}
+}
+
 func marketDataSourceSchema() map[string]any {
 	return map[string]any{
 		"type":     "object",
@@ -303,7 +360,7 @@ func marketDataSourceSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
 			},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v2"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v3"},
 		},
 	}
 }

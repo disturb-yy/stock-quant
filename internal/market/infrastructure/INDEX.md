@@ -11,3 +11,4 @@
 ## Current Contents
 
 - `mysql_overview.go`：市场概览 MySQL 查询实现。
+- `mysql_sectors.go`：行业分类成分与最新交易日收盘价 MySQL 查询实现。

@@ -20,11 +20,19 @@ const (
 )
 
 func newRouter(applicationLogger *slog.Logger, statusReaders ...demo.StatusReader) *gin.Engine {
-	return newRouterWithOverview(applicationLogger, nil, statusReaders...)
+	return newRouterWithMarket(applicationLogger, nil, nil, statusReaders...)
 }
 
 func newRouterWithOverview(applicationLogger *slog.Logger, overviewReader interface {
 	Overview(context.Context) (market.MarketOverview, error)
+}, statusReaders ...demo.StatusReader) *gin.Engine {
+	return newRouterWithMarket(applicationLogger, overviewReader, nil, statusReaders...)
+}
+
+func newRouterWithMarket(applicationLogger *slog.Logger, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
 }, statusReaders ...demo.StatusReader) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
@@ -37,6 +45,7 @@ func newRouterWithOverview(applicationLogger *slog.Logger, overviewReader interf
 	})
 	health.RegisterRoutes(apiV1)
 	market.RegisterRoutes(apiV1, overviewReader)
+	market.RegisterSectorRoutes(apiV1, sectorReader)
 	if len(statusReaders) > 0 {
 		demo.RegisterRoutes(apiV1, statusReaders[0])
 	}
@@ -56,9 +65,17 @@ func newHTTPServer(applicationLogger *slog.Logger, address string, statusReaders
 func newHTTPServerWithOverview(applicationLogger *slog.Logger, address string, overviewReader interface {
 	Overview(context.Context) (market.MarketOverview, error)
 }, statusReaders ...demo.StatusReader) *http.Server {
+	return newHTTPServerWithMarket(applicationLogger, address, overviewReader, nil, statusReaders...)
+}
+
+func newHTTPServerWithMarket(applicationLogger *slog.Logger, address string, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
+}, statusReaders ...demo.StatusReader) *http.Server {
 	return &http.Server{
 		Addr:    address,
-		Handler: newRouterWithOverview(applicationLogger, overviewReader, statusReaders...),
+		Handler: newRouterWithMarket(applicationLogger, overviewReader, sectorReader, statusReaders...),
 	}
 }
 
