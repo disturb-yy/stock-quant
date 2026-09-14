@@ -25,6 +25,7 @@
 | `internal/auth` | 身份认证与授权领域 |
 | `internal/health` | 跨领域健康 HTTP 接口适配 |
 | `internal/migration` | 数据库 migration 命名与执行边界 |
+| `pkg/api` | 跨领域 API 契约、错误模型和分页约定 |
 | `pkg/config` | 配置加载 |
 | `pkg/logger` | 通用日志能力 |
 

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"example.com/stock-ddd/internal/health"
+	"example.com/stock-ddd/pkg/api"
 	"example.com/stock-ddd/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
@@ -15,8 +18,15 @@ const (
 
 func newRouter(applicationLogger *slog.Logger) *gin.Engine {
 	router := gin.New()
-	router.Use(logger.GinMiddleware(applicationLogger), gin.Recovery())
-	health.RegisterRoutes(router.Group(apiV1Prefix))
+	router.HandleMethodNotAllowed = true
+	router.Use(logger.GinMiddleware(applicationLogger), gin.CustomRecovery(apiV1RecoveryHandler))
+
+	apiV1 := router.Group(apiV1Prefix)
+	apiV1.GET("/openapi.json", openAPIHandler)
+	health.RegisterRoutes(apiV1)
+
+	router.NoRoute(apiV1NoRouteHandler)
+	router.NoMethod(apiV1NoMethodHandler)
 	return router
 }
 
@@ -25,4 +35,61 @@ func newHTTPServer(applicationLogger *slog.Logger, address string) *http.Server 
 		Addr:    address,
 		Handler: newRouter(applicationLogger),
 	}
+}
+
+func openAPIHandler(context *gin.Context) {
+	context.JSON(http.StatusOK, api.OpenAPIDocument())
+}
+
+func apiV1RecoveryHandler(context *gin.Context, _ any) {
+	if isAPIPath(context.Request.URL.Path) {
+		writeAPIError(context, http.StatusInternalServerError, api.CodeInternal, "服务内部错误", nil)
+		return
+	}
+
+	context.AbortWithStatus(http.StatusInternalServerError)
+}
+
+func validatePaginationQuery() gin.HandlerFunc {
+	// 仅由实际的列表路由显式挂载，避免影响 health 和 OpenAPI 等非分页接口。
+	return func(context *gin.Context) {
+		if _, err := api.ParsePagination(context.Request.URL.Query()); err != nil {
+			var paginationError *api.PaginationValidationError
+			if errors.As(err, &paginationError) {
+				writeAPIError(context, http.StatusBadRequest, api.CodeInvalidPagination, "分页参数无效", paginationError.Details())
+				return
+			}
+
+			writeAPIError(context, http.StatusBadRequest, api.CodeValidation, "请求参数校验失败", nil)
+			return
+		}
+
+		context.Next()
+	}
+}
+
+func apiV1NoRouteHandler(context *gin.Context) {
+	if isAPIPath(context.Request.URL.Path) {
+		writeAPIError(context, http.StatusNotFound, api.CodeNotFound, "请求的资源不存在", nil)
+		return
+	}
+
+	context.Status(http.StatusNotFound)
+}
+
+func apiV1NoMethodHandler(context *gin.Context) {
+	if isAPIPath(context.Request.URL.Path) {
+		writeAPIError(context, http.StatusMethodNotAllowed, api.CodeMethodNotAllowed, "请求方法不被允许", nil)
+		return
+	}
+
+	context.Status(http.StatusMethodNotAllowed)
+}
+
+func writeAPIError(context *gin.Context, status int, code api.ErrorCode, message string, details map[string]any) {
+	context.AbortWithStatusJSON(status, api.NewErrorResponse(code, message, details))
+}
+
+func isAPIPath(path string) bool {
+	return path == apiV1Prefix || strings.HasPrefix(path, apiV1Prefix+"/")
 }
