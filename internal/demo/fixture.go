@@ -3,6 +3,7 @@ package demo
 
 import (
 	"fmt"
+	"time"
 
 	analysisdomain "github.com/disturb-yy/stock-quant/internal/analysis/domain"
 	marketdomain "github.com/disturb-yy/stock-quant/internal/market/domain"
@@ -13,7 +14,7 @@ const (
 	// SeedName 是数据库中演示数据元数据的稳定名称。
 	SeedName = "fnd-003-demo"
 	// SeedVersion 是本 US 的可追踪 fixture 版本。
-	SeedVersion = "fnd-003-demo-v3"
+	SeedVersion = "fnd-003-demo-v4"
 	// SeedAsOf 是 fixture 的统一观测日期。
 	SeedAsOf = "2024-06-28"
 	// SeedObservedAt 是 Seed 数据统一的 UTC 观测时间。
@@ -42,14 +43,11 @@ type Fixture struct {
 
 // DemoFixture 返回新的 fixture 值，调用方可以安全地修改其切片。
 func DemoFixture() Fixture {
+	plans := signalFixturePlans()
 	return Fixture{
-		Version: SeedVersion,
-		AsOf:    SeedAsOf,
-		Instruments: []stockdomain.Instrument{
-			{Code: "000001.SZ", Name: "平安银行", Exchange: "SZSE", Status: stockdomain.InstrumentStatusActive, AsOf: SeedAsOf},
-			{Code: "300750.SZ", Name: "宁德时代", Exchange: "SZSE", Status: stockdomain.InstrumentStatusActive, AsOf: SeedAsOf},
-			{Code: "600519.SH", Name: "贵州茅台", Exchange: "SSE", Status: stockdomain.InstrumentStatusActive, AsOf: SeedAsOf},
-		},
+		Version:     SeedVersion,
+		AsOf:        SeedAsOf,
+		Instruments: signalFixtureInstruments(plans),
 		Sectors: []marketdomain.Sector{
 			{Code: "BANK", Name: "银行"},
 			{Code: "EQUIPMENT", Name: "电力设备"},
@@ -60,14 +58,7 @@ func DemoFixture() Fixture {
 			{SectorCode: "EQUIPMENT", InstrumentCode: "300750.SZ"},
 			{SectorCode: "FOOD_BEVERAGE", InstrumentCode: "600519.SH"},
 		},
-		DailyBars: []marketdomain.DailyBar{
-			{InstrumentCode: "000001.SZ", TradeDate: "2024-06-27", Open: "10.12", High: "10.28", Low: "10.05", Close: "10.22", Volume: 78210000, TurnoverAmount: "798296400.00"},
-			{InstrumentCode: "000001.SZ", TradeDate: SeedAsOf, Open: "10.22", High: "10.36", Low: "10.18", Close: "10.31", Volume: 81540000, TurnoverAmount: "840027600.00"},
-			{InstrumentCode: "300750.SZ", TradeDate: "2024-06-27", Open: "185.20", High: "188.60", Low: "183.10", Close: "187.45", Volume: 36210000, TurnoverAmount: "6785914500.00"},
-			{InstrumentCode: "300750.SZ", TradeDate: SeedAsOf, Open: "187.45", High: "191.80", Low: "186.70", Close: "190.12", Volume: 40180000, TurnoverAmount: "7633021600.00"},
-			{InstrumentCode: "600519.SH", TradeDate: "2024-06-27", Open: "1468.00", High: "1482.50", Low: "1459.01", Close: "1478.00", Volume: 2210000, TurnoverAmount: "3266380000.00"},
-			{InstrumentCode: "600519.SH", TradeDate: SeedAsOf, Open: "1478.00", High: "1485.20", Low: "1470.00", Close: "1475.50", Volume: 2390000, TurnoverAmount: "3529445000.00"},
-		},
+		DailyBars: signalFixtureDailyBars(plans),
 		FinancialMetrics: []analysisdomain.FinancialMetric{
 			{InstrumentCode: "000001.SZ", MetricDate: SeedAsOf, MetricName: "pe_ttm", MetricValue: "5.82"},
 			{InstrumentCode: "000001.SZ", MetricDate: SeedAsOf, MetricName: "roe", MetricValue: "10.84"},
@@ -83,6 +74,128 @@ func DemoFixture() Fixture {
 			{Code: "000300.SH", Name: "沪深300", TradeDate: SeedAsOf, ObservedAt: SeedObservedAt, Close: "3401.76", Change: "-5.87", ChangePercent: "-0.17"},
 		},
 	}
+}
+
+type signalFixturePlan struct {
+	Code             string
+	Name             string
+	Exchange         string
+	StartClose       float64
+	EndClose         float64
+	HistoricalVolume int64
+	LatestVolume     int64
+}
+
+func signalFixturePlans() []signalFixturePlan {
+	return []signalFixturePlan{
+		{Code: "000001.SZ", Name: "平安银行", Exchange: "SZSE", StartClose: 9.50, EndClose: 10.31, HistoricalVolume: 50000000, LatestVolume: 81540000},
+		{Code: "300750.SZ", Name: "宁德时代", Exchange: "SZSE", StartClose: 150.00, EndClose: 190.12, HistoricalVolume: 20000000, LatestVolume: 40180000},
+		{Code: "600519.SH", Name: "贵州茅台", Exchange: "SSE", StartClose: 1550.00, EndClose: 1475.50, HistoricalVolume: 2500000, LatestVolume: 2390000},
+		{Code: "000002.SZ", Name: "万科A", Exchange: "SZSE", StartClose: 20.00, EndClose: 25.50, HistoricalVolume: 30000000, LatestVolume: 36000000},
+		{Code: "000858.SZ", Name: "五粮液", Exchange: "SZSE", StartClose: 100.00, EndClose: 110.00, HistoricalVolume: 18000000, LatestVolume: 22000000},
+		{Code: "002594.SZ", Name: "比亚迪", Exchange: "SZSE", StartClose: 200.00, EndClose: 210.00, HistoricalVolume: 15000000, LatestVolume: 19000000},
+		{Code: "601318.SH", Name: "中国平安", Exchange: "SSE", StartClose: 40.00, EndClose: 50.00, HistoricalVolume: 25000000, LatestVolume: 30000000},
+		{Code: "601398.SH", Name: "工商银行", Exchange: "SSE", StartClose: 4.00, EndClose: 4.50, HistoricalVolume: 45000000, LatestVolume: 50000000},
+		{Code: "601166.SH", Name: "兴业银行", Exchange: "SSE", StartClose: 15.00, EndClose: 16.00, HistoricalVolume: 22000000, LatestVolume: 26000000},
+		{Code: "600036.SH", Name: "招商银行", Exchange: "SSE", StartClose: 30.00, EndClose: 35.00, HistoricalVolume: 20000000, LatestVolume: 24000000},
+	}
+}
+
+func signalFixtureInstruments(plans []signalFixturePlan) []stockdomain.Instrument {
+	instruments := make([]stockdomain.Instrument, 0, len(plans))
+	for _, plan := range plans {
+		instruments = append(instruments, stockdomain.Instrument{
+			Code: plan.Code, Name: plan.Name, Exchange: plan.Exchange,
+			Status: stockdomain.InstrumentStatusActive, AsOf: SeedAsOf,
+		})
+	}
+	return instruments
+}
+
+func signalFixtureDailyBars(plans []signalFixturePlan) []marketdomain.DailyBar {
+	dates := signalFixtureTradingDates(121)
+	bars := make([]marketdomain.DailyBar, 0, len(plans)*len(dates))
+	for _, plan := range plans {
+		for index, date := range dates {
+			bars = append(bars, signalFixtureBar(plan, index, date, len(dates)))
+		}
+	}
+	return bars
+}
+
+func signalFixtureTradingDates(count int) []string {
+	end, _ := time.Parse("2006-01-02", SeedAsOf)
+	dates := make([]string, count)
+	index := count - 1
+	for index >= 0 {
+		if end.Weekday() != time.Saturday && end.Weekday() != time.Sunday {
+			dates[index] = end.Format("2006-01-02")
+			index--
+		}
+		end = end.AddDate(0, 0, -1)
+	}
+	return dates
+}
+
+func signalFixtureBar(plan signalFixturePlan, index int, date string, total int) marketdomain.DailyBar {
+	progress := float64(index) / float64(total-1)
+	close := plan.StartClose + (plan.EndClose-plan.StartClose)*progress
+	volume := plan.HistoricalVolume
+	if index == total-1 {
+		close = plan.EndClose
+		volume = plan.LatestVolume
+	}
+	if index == total-2 {
+		return signalFixturePreviousBar(plan)
+	}
+	if index == total-1 {
+		if bar, ok := signalFixtureLatestBar(plan); ok {
+			return bar
+		}
+	}
+	return marketdomain.DailyBar{
+		InstrumentCode: plan.Code, TradeDate: date,
+		Open: formatFixturePrice(close * 0.995), High: formatFixturePrice(close * 1.001),
+		Low: formatFixturePrice(close * 0.985), Close: formatFixturePrice(close),
+		Volume: volume, TurnoverAmount: formatFixturePrice(close * float64(volume)),
+	}
+}
+
+func signalFixturePreviousBar(plan signalFixturePlan) marketdomain.DailyBar {
+	previous := marketdomain.DailyBar{InstrumentCode: plan.Code, TradeDate: "2024-06-27"}
+	switch plan.Code {
+	case "000001.SZ":
+		previous.Open, previous.High, previous.Low, previous.Close = "10.12", "10.28", "10.05", "10.22"
+		previous.Volume, previous.TurnoverAmount = 78210000, "798296400.00"
+	case "300750.SZ":
+		previous.Open, previous.High, previous.Low, previous.Close = "185.20", "188.60", "183.10", "187.45"
+		previous.Volume, previous.TurnoverAmount = 36210000, "6785914500.00"
+	case "600519.SH":
+		previous.Open, previous.High, previous.Low, previous.Close = "1468.00", "1482.50", "1459.01", "1478.00"
+		previous.Volume, previous.TurnoverAmount = 2210000, "3266380000.00"
+	default:
+		close := plan.EndClose * 0.998
+		previous.Open, previous.High, previous.Low, previous.Close = formatFixturePrice(close), formatFixturePrice(close*1.01), formatFixturePrice(close*0.985), formatFixturePrice(close)
+		previous.Volume, previous.TurnoverAmount = plan.HistoricalVolume, formatFixturePrice(close*float64(plan.HistoricalVolume))
+	}
+	return previous
+}
+
+func signalFixtureLatestBar(plan signalFixturePlan) (marketdomain.DailyBar, bool) {
+	switch plan.Code {
+	case "000001.SZ":
+		return marketdomain.DailyBar{InstrumentCode: plan.Code, TradeDate: SeedAsOf, Open: "10.22", High: "10.36", Low: "10.18", Close: "10.31", Volume: 81540000, TurnoverAmount: "840027600.00"}, true
+	case "300750.SZ":
+		return marketdomain.DailyBar{InstrumentCode: plan.Code, TradeDate: SeedAsOf, Open: "187.45", High: "191.80", Low: "186.70", Close: "190.12", Volume: 40180000, TurnoverAmount: "7633021600.00"}, true
+	case "600519.SH":
+		return marketdomain.DailyBar{InstrumentCode: plan.Code, TradeDate: SeedAsOf, Open: "1478.00", High: "1485.20", Low: "1470.00", Close: "1475.50", Volume: 2390000, TurnoverAmount: "3529445000.00"}, true
+	default:
+		return marketdomain.DailyBar{}, false
+	}
+}
+
+func formatFixturePrice(value float64) string {
+	return fmt.Sprintf("%.2f", value)
 }
 
 // Validate 检查 fixture 版本及各类实体的领域约束。

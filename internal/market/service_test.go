@@ -33,7 +33,7 @@ func TestOverviewReturnsStableContractAndIndexOrder(t *testing.T) {
 	if overview.AsOf != "2024-06-28" || overview.ObservedAt != "2024-06-28T07:00:00Z" {
 		t.Fatalf("observation point = %q/%q, want seed observation point", overview.AsOf, overview.ObservedAt)
 	}
-	if overview.Source.Mode != ModeDemo || overview.Source.Provider != DemoProviderName || overview.Source.SeedVersion != "fnd-003-demo-v3" {
+	if overview.Source.Mode != ModeDemo || overview.Source.Provider != DemoProviderName || overview.Source.SeedVersion != "fnd-003-demo-v4" {
 		t.Fatalf("source = %#v, want demo seed source", overview.Source)
 	}
 	wantCodes := []string{"000001.SH", "399001.SZ", "399006.SZ", "000300.SH"}
@@ -74,7 +74,7 @@ func TestOverviewRejectsIncompleteIndices(t *testing.T) {
 
 func validOverviewSnapshot() OverviewSnapshot {
 	return OverviewSnapshot{
-		SeedVersion: "fnd-003-demo-v3",
+		SeedVersion: "fnd-003-demo-v4",
 		AsOf:        "2024-06-28",
 		ObservedAt:  "2024-06-28T07:00:00Z",
 		Indices: []domain.IndexSnapshot{

@@ -164,7 +164,7 @@ cd /home/jadon/projects/go/stock-quant && ./scripts/dev/start.sh
 DB_HOST=127.0.0.1 DB_PORT=3307 DB_NAME=stock_quant_dev DB_USER=stock_quant DB_PASSWORD=stock_quant_dev go run ./cmd/seed
 ```
 
-开发状态接口为 `GET http://127.0.0.1:8357/api/v1/dev/demo-status`，市场概览接口为 `GET http://127.0.0.1:8357/api/v1/markets/overview`，行业表现接口为 `GET http://127.0.0.1:8357/api/v1/markets/sectors`，OpenAPI 为 `GET http://127.0.0.1:8357/api/v1/openapi.json`。`mode=demo` 表示数据库中 fixture 版本和四类计数完全匹配；`mode=fallback` 表示尚未 seed 或请求了当前未实现的真实 Provider；`mode=real` 为未来真实 Provider 实现保留，当前不会被伪装返回。市场概览和行业表现响应中的 `source` 会明确标记 Seed 版本。
+开发状态接口为 `GET http://127.0.0.1:8357/api/v1/dev/demo-status`，市场概览接口为 `GET http://127.0.0.1:8357/api/v1/markets/overview`，行业表现接口为 `GET http://127.0.0.1:8357/api/v1/markets/sectors`，市场信号接口为 `GET http://127.0.0.1:8357/api/v1/markets/signals?type=volume_surge&params=%7B%22window%22%3A20%2C%22multiple%22%3A1.5%7D`，OpenAPI 为 `GET http://127.0.0.1:8357/api/v1/openapi.json`。`mode=demo` 表示数据库中 fixture 版本和四类计数完全匹配；`mode=fallback` 表示尚未 seed 或请求了当前未实现的真实 Provider；`mode=real` 为未来真实 Provider 实现保留，当前不会被伪装返回。市场概览、行业表现和市场信号响应中的 `source` 会明确标记 Seed 版本。
 
 ## 静态检查
 

@@ -8,6 +8,7 @@ const (
 	CodeMethodNotAllowed      ErrorCode = "METHOD_NOT_ALLOWED"
 	CodeValidation            ErrorCode = "VALIDATION_ERROR"
 	CodeInvalidPagination     ErrorCode = "INVALID_PAGINATION"
+	CodeInsufficientHistory   ErrorCode = "INSUFFICIENT_HISTORY"
 	CodeInternal              ErrorCode = "INTERNAL_ERROR"
 	CodeDependencyUnavailable ErrorCode = "DEPENDENCY_UNAVAILABLE"
 )

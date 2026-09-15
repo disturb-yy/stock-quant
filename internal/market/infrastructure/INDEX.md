@@ -12,3 +12,4 @@
 
 - `mysql_overview.go`：市场概览 MySQL 查询实现。
 - `mysql_sectors.go`：行业分类成分与最新交易日收盘价 MySQL 查询实现。
+- `mysql_signals.go`：按最新交易日读取在市股票窗口日行情，供信号扫描使用。

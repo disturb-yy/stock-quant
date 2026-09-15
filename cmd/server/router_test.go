@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/disturb-yy/stock-quant/internal/demo"
 	"github.com/disturb-yy/stock-quant/internal/market"
+	marketdomain "github.com/disturb-yy/stock-quant/internal/market/domain"
 	"github.com/disturb-yy/stock-quant/pkg/api"
 	"github.com/disturb-yy/stock-quant/pkg/config"
 	"github.com/gin-gonic/gin"
@@ -66,8 +68,24 @@ type fakeMarketSectorReader struct {
 	sectors market.MarketSectors
 }
 
+type fakeMarketSignalReader struct {
+	signals market.MarketSignals
+}
+
+type fakeAPISignalReader struct {
+	snapshot market.SignalSnapshot
+}
+
+func (reader fakeAPISignalReader) ReadSignalSnapshot(context.Context, int) (market.SignalSnapshot, error) {
+	return reader.snapshot, nil
+}
+
 func (reader fakeMarketSectorReader) Sectors(context.Context) (market.MarketSectors, error) {
 	return reader.sectors, nil
+}
+
+func (reader fakeMarketSignalReader) Scan(context.Context, market.SignalRequest) (market.MarketSignals, error) {
+	return reader.signals, nil
 }
 
 func (reader fakeMarketOverviewReader) Overview(context.Context) (market.MarketOverview, error) {
@@ -114,6 +132,87 @@ func TestNewRouterRegistersMarketSectors(t *testing.T) {
 	if !strings.Contains(response.Body.String(), `"code":"BANK"`) {
 		t.Fatalf("response = %q, want market sectors", response.Body.String())
 	}
+}
+
+func TestNewRouterRegistersMarketSignals(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	applicationLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	router := newRouterWithMarketAndSignals(applicationLogger, nil, nil, fakeMarketSignalReader{
+		signals: market.MarketSignals{AsOf: "2024-06-28", Signals: []market.SignalResult{{Code: "300750.SZ", Name: "宁德时代"}}},
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/markets/signals?type=new_high", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if !strings.Contains(response.Body.String(), `"code":"300750.SZ"`) {
+		t.Fatalf("response = %q, want market signals", response.Body.String())
+	}
+}
+
+func TestMarketSignalsAPIIntegration(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	applicationLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	service, err := market.NewSignalService(fakeAPISignalReader{snapshot: market.SignalSnapshot{
+		SeedVersion: "seed", AsOf: "2024-01-21", Series: []marketdomain.SignalSeries{apiSignalSeries("A", "甲", 200, 100)},
+	}}, market.ProviderSelection{Mode: market.ModeDemo, Provider: market.DemoProviderName})
+	if err != nil {
+		t.Fatalf("NewSignalService() error = %v", err)
+	}
+	server := httptest.NewServer(newRouterWithMarketAndSignals(applicationLogger, nil, nil, service))
+	t.Cleanup(server.Close)
+
+	tests := []struct {
+		name       string
+		path       string
+		statusCode int
+		code       api.ErrorCode
+		wantBody   string
+	}{
+		{name: "success", path: "/api/v1/markets/signals?type=volume_surge&params=%7B%22window%22%3A20%2C%22multiple%22%3A2%7D", statusCode: http.StatusOK, wantBody: `"code":"A"`},
+		{name: "invalid params", path: "/api/v1/markets/signals?type=volume_surge&params=%7B%22window%22%3A30%7D", statusCode: http.StatusBadRequest, code: api.CodeValidation},
+		{name: "no match", path: "/api/v1/markets/signals?type=new_high", statusCode: http.StatusOK, wantBody: `"signals":[]`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response, err := server.Client().Get(server.URL + test.path)
+			if err != nil {
+				t.Fatalf("GET market signals: %v", err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatalf("read response: %v", err)
+			}
+			if response.StatusCode != test.statusCode {
+				t.Fatalf("status = %d, want %d; body = %s", response.StatusCode, test.statusCode, body)
+			}
+			if test.code != "" {
+				var errorBody api.ErrorResponse
+				if err := json.Unmarshal(body, &errorBody); err != nil {
+					t.Fatalf("decode error response: %v", err)
+				}
+				if errorBody.Code != test.code {
+					t.Fatalf("error code = %q, want %q", errorBody.Code, test.code)
+				}
+			}
+			if test.wantBody != "" && !strings.Contains(string(body), test.wantBody) {
+				t.Fatalf("body = %s, want substring %q", body, test.wantBody)
+			}
+		})
+	}
+}
+
+func apiSignalSeries(code, name string, currentVolume, previousVolume int64) marketdomain.SignalSeries {
+	bars := make([]marketdomain.DailyBar, 0, 21)
+	for index := 0; index < 20; index++ {
+		bars = append(bars, marketdomain.DailyBar{InstrumentCode: code, TradeDate: fmt.Sprintf("2024-01-%02d", index+1), Open: "99", High: "100", Low: "98", Close: "100", Volume: previousVolume, TurnoverAmount: "1"})
+	}
+	bars = append(bars, marketdomain.DailyBar{InstrumentCode: code, TradeDate: "2024-01-21", Open: "100", High: "101", Low: "99", Close: "100", Volume: currentVolume, TurnoverAmount: "1"})
+	return marketdomain.SignalSeries{InstrumentCode: code, InstrumentName: name, Bars: bars}
 }
 
 func TestNewRouterRegistersDevelopmentDemoStatus(t *testing.T) {
@@ -196,7 +295,7 @@ func TestOpenAPIEndpointOverHTTP(t *testing.T) {
 	if document.OpenAPI != "3.0.3" {
 		t.Fatalf("openapi = %q, want %q", document.OpenAPI, "3.0.3")
 	}
-	for _, path := range []string{"/api/v1/health", "/api/v1/markets/sectors", "/api/v1/openapi.json"} {
+	for _, path := range []string{"/api/v1/health", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/openapi.json"} {
 		if _, ok := document.Paths[path]; !ok {
 			t.Fatalf("OpenAPI response missing path %q", path)
 		}

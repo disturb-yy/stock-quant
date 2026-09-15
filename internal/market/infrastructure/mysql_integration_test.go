@@ -63,11 +63,11 @@ func TestMySQLOverviewReader(t *testing.T) {
 	if len(snapshot.Indices) != 4 {
 		t.Fatalf("index count = %d, want 4", len(snapshot.Indices))
 	}
-	if snapshot.Breadth.Advancing != 2 || snapshot.Breadth.Declining != 1 || snapshot.Breadth.Unchanged != 0 {
-		t.Fatalf("breadth = %#v, want 2/1/0", snapshot.Breadth)
+	if snapshot.Breadth.Advancing != 9 || snapshot.Breadth.Declining != 1 || snapshot.Breadth.Unchanged != 0 {
+		t.Fatalf("breadth = %#v, want 9/1/0", snapshot.Breadth)
 	}
-	if snapshot.Breadth.TurnoverAmount != "12002494200.00" {
-		t.Fatalf("turnover = %q, want %q", snapshot.Breadth.TurnoverAmount, "12002494200.00")
+	if snapshot.Breadth.TurnoverAmount != "22311494200.00" {
+		t.Fatalf("turnover = %q, want %q", snapshot.Breadth.TurnoverAmount, "22311494200.00")
 	}
 	service, err := market.NewOverviewService(reader, market.ProviderSelection{Mode: market.ModeDemo, Provider: market.DemoProviderName})
 	if err != nil {
@@ -75,6 +75,42 @@ func TestMySQLOverviewReader(t *testing.T) {
 	}
 	if _, err := service.Overview(context.Background()); err != nil {
 		t.Fatalf("Overview() error = %v", err)
+	}
+	signalService, err := market.NewSignalService(reader, market.ProviderSelection{Mode: market.ModeDemo, Provider: market.DemoProviderName})
+	if err != nil {
+		t.Fatalf("NewSignalService() error = %v", err)
+	}
+	signalResult, err := signalService.Scan(context.Background(), market.SignalRequest{Type: "volume_surge", Params: `{"window":20,"multiple":1.5}`})
+	if err != nil {
+		t.Fatalf("volume signal Scan() error = %v", err)
+	}
+	if signalResult.AsOf != demo.SeedAsOf || signalResult.Source.SeedVersion != demo.SeedVersion || len(signalResult.Signals) != 2 {
+		t.Fatalf("volume signal result = %#v, want two seeded matches", signalResult)
+	}
+	strongTop10, err := signalService.Scan(context.Background(), market.SignalRequest{Type: "strong", Params: `{"window":20,"top_percent":10}`})
+	if err != nil {
+		t.Fatalf("strong top10 Scan() error = %v", err)
+	}
+	strongTop20, err := signalService.Scan(context.Background(), market.SignalRequest{Type: "strong", Params: `{"window":20,"top_percent":20}`})
+	if err != nil {
+		t.Fatalf("strong top20 Scan() error = %v", err)
+	}
+	if len(strongTop10.Signals) != 1 || len(strongTop20.Signals) != 2 {
+		t.Fatalf("strong signal counts = %d/%d, want 1/2", len(strongTop10.Signals), len(strongTop20.Signals))
+	}
+	noMatch, err := signalService.Scan(context.Background(), market.SignalRequest{Type: "volume_surge", Params: `{"window":20,"multiple":2}`})
+	if err != nil {
+		t.Fatalf("volume no-match Scan() error = %v", err)
+	}
+	if len(noMatch.Signals) != 0 {
+		t.Fatalf("volume no-match signals = %#v, want empty", noMatch.Signals)
+	}
+	signalSnapshot, err := reader.ReadSignalSnapshot(context.Background(), 120)
+	if err != nil {
+		t.Fatalf("ReadSignalSnapshot() error = %v", err)
+	}
+	if len(signalSnapshot.Series) != 10 || len(signalSnapshot.Series[0].Bars) != 121 {
+		t.Fatalf("signal snapshot = %d series/%d bars, want 10/121", len(signalSnapshot.Series), len(signalSnapshot.Series[0].Bars))
 	}
 	sectorSnapshot, err := reader.ReadSectorSnapshot(context.Background())
 	if err != nil {

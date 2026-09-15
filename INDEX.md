@@ -113,6 +113,7 @@ internal/auth/
 | 修改行情模型 | `internal/market/domain` |
 | 修改行情同步流程 | `internal/market` |
 | 修改市场概览查询 | `internal/market/service.go`、`internal/market/handler.go` |
+| 修改市场信号扫描 | `internal/market/signals.go`、`internal/market/domain/signal.go`、`internal/market/infrastructure/mysql_signals.go` |
 | 修改行情 MySQL 查询 | `internal/market/infrastructure/mysql_overview.go` |
 | 修改 Tushare 接入 | `internal/market/infrastructure/provider_tushare.go` |
 | 修改指标计算规则 | `internal/analysis/domain` |

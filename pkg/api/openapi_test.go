@@ -34,7 +34,7 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if document.Info.Version != "v1" {
 		t.Fatalf("info.version = %q, want %q", document.Info.Version, "v1")
 	}
-	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/openapi.json"} {
+	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/openapi.json"} {
 		if _, ok := document.Paths[path]; !ok {
 			t.Fatalf("OpenAPI paths missing %q", path)
 		}
@@ -42,10 +42,52 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if _, ok := document.Paths["/api/v1/dev/demo-status"]; !ok {
 		t.Fatal("OpenAPI paths missing development demo status")
 	}
-	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover"} {
+	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult"} {
 		if _, ok := document.Components.Schemas[schema]; !ok {
 			t.Fatalf("OpenAPI schemas missing %q", schema)
 		}
+	}
+}
+
+func TestOpenAPIMarketSignalsContract(t *testing.T) {
+	document := OpenAPIDocument()
+	paths := document["paths"].(map[string]any)
+	path := paths["/api/v1/markets/signals"].(map[string]any)
+	get := path["get"].(map[string]any)
+	if get["operationId"] != "getMarketSignals" {
+		t.Fatalf("market signals operation = %#v, want getMarketSignals", get["operationId"])
+	}
+	parameters := get["parameters"].([]any)
+	if len(parameters) != 2 {
+		t.Fatalf("market signals parameter count = %d, want 2", len(parameters))
+	}
+	typeParameter := parameters[0].(map[string]any)
+	typeSchema := typeParameter["schema"].(map[string]any)
+	if typeParameter["name"] != "type" || typeParameter["required"] != true {
+		t.Fatalf("type parameter = %#v, want required type", typeParameter)
+	}
+	if got := typeSchema["enum"].([]string); len(got) != 4 || got[0] != "volume_surge" || got[3] != "strong" {
+		t.Fatalf("type enum = %#v, want four signal types", got)
+	}
+	responses := get["responses"].(map[string]any)
+	if _, ok := responses["400"]; !ok {
+		t.Fatal("market signals responses missing 400")
+	}
+	if _, ok := responses["422"]; !ok {
+		t.Fatal("market signals responses missing 422")
+	}
+	if _, ok := responses["503"]; !ok {
+		t.Fatal("market signals responses missing 503")
+	}
+	components := document["components"].(map[string]any)
+	schemas := components["schemas"].(map[string]any)
+	paramsSchema := schemas["SignalParameters"].(map[string]any)
+	properties := paramsSchema["properties"].(map[string]any)
+	if properties["window"].(map[string]any)["default"] != 20 || properties["multiple"].(map[string]any)["default"] != 1.5 || properties["top_percent"].(map[string]any)["default"] != 10 {
+		t.Fatalf("signal parameter defaults = %#v, want 20/1.5/10", properties)
+	}
+	if string(responses["200"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)["$ref"].(string)) != "#/components/schemas/MarketSignals" {
+		t.Fatal("market signals 200 response must reference MarketSignals")
 	}
 }
 

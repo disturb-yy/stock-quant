@@ -28,6 +28,7 @@ func apiPaths(includeDevelopment bool) map[string]any {
 		"/api/v1/health":           healthPath(),
 		"/api/v1/markets/overview": marketOverviewPath(),
 		"/api/v1/markets/sectors":  marketSectorsPath(),
+		"/api/v1/markets/signals":  marketSignalsPath(),
 		"/api/v1/openapi.json":     openAPIPath(),
 	}
 	if includeDevelopment {
@@ -118,6 +119,39 @@ func marketSectorsPath() map[string]any {
 	}
 }
 
+func marketSignalsPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "getMarketSignals",
+			"summary":     "按最新交易日扫描市场信号",
+			"parameters": []any{
+				map[string]any{
+					"name": "type", "in": "query", "required": true,
+					"schema": map[string]any{"type": "string", "enum": []string{"volume_surge", "breakout", "new_high", "strong"}},
+				},
+				map[string]any{
+					"name": "params", "in": "query", "required": false,
+					"description": "URL 编码的 JSON 参数对象；不同信号只允许使用其适用字段，省略时使用默认值。",
+					"content": map[string]any{
+						"application/json": map[string]any{
+							"schema":  map[string]any{"$ref": "#/components/schemas/SignalParameters"},
+							"example": map[string]any{"window": 20, "multiple": 1.5},
+						},
+					},
+				},
+			},
+			"responses": map[string]any{
+				"200": jsonReferenceResponse("市场信号扫描结果", "#/components/schemas/MarketSignals"),
+				"400": errorResponse("信号类型或参数无效"),
+				"404": errorResponse("请求的资源不存在"),
+				"405": errorResponse("请求方法不被允许"),
+				"422": errorResponse("历史行情不足"),
+				"503": errorResponse("市场信号数据不可用"),
+			},
+		},
+	}
+}
+
 func jsonReferenceResponse(description, reference string) map[string]any {
 	return map[string]any{
 		"description": description,
@@ -149,6 +183,9 @@ func apiComponents() map[string]any {
 			"MarketIndex":       marketIndexSchema(),
 			"MarketBreadth":     marketBreadthSchema(),
 			"MarketTurnover":    marketTurnoverSchema(),
+			"MarketSignals":     marketSignalsSchema(),
+			"SignalParameters":  signalParametersSchema(),
+			"SignalResult":      signalResultSchema(),
 		},
 	}
 }
@@ -175,6 +212,7 @@ func errorSchema() map[string]any {
 					string(CodeMethodNotAllowed),
 					string(CodeValidation),
 					string(CodeInvalidPagination),
+					string(CodeInsufficientHistory),
 					string(CodeInternal),
 					string(CodeDependencyUnavailable),
 				},
@@ -280,7 +318,7 @@ func demoStatusSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
 			},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v3"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v4"},
 			"as_of":        map[string]any{"type": "string", "format": "date", "nullable": true, "example": "2024-06-28"},
 			"counts":       map[string]any{"$ref": "#/components/schemas/DemoCounts"},
 			"sample_stocks": map[string]any{
@@ -360,7 +398,7 @@ func marketDataSourceSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
 			},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v3"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v4"},
 		},
 	}
 }
@@ -398,6 +436,52 @@ func marketTurnoverSchema() map[string]any {
 		"properties": map[string]any{
 			"amount":   map[string]any{"type": "string", "example": "12002494200.00"},
 			"currency": map[string]any{"type": "string", "enum": []string{"CNY"}},
+		},
+	}
+}
+
+func signalParametersSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"window": map[string]any{
+				"type": "integer", "enum": []int{20, 60, 120}, "default": 20,
+				"description": "放量、突破、新高和强势均使用的历史交易日窗口。",
+			},
+			"multiple": map[string]any{
+				"type": "number", "enum": []float64{1.5, 2}, "default": 1.5,
+				"description": "仅放量信号使用的成交量倍数。",
+			},
+			"top_percent": map[string]any{
+				"type": "integer", "enum": []int{10, 20}, "default": 10,
+				"description": "仅强势信号使用的收益率排名比例。",
+			},
+		},
+	}
+}
+
+func marketSignalsSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"type", "params", "as_of", "source", "signals"},
+		"properties": map[string]any{
+			"type":    map[string]any{"type": "string", "enum": []string{"volume_surge", "breakout", "new_high", "strong"}},
+			"params":  map[string]any{"$ref": "#/components/schemas/SignalParameters"},
+			"as_of":   map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
+			"source":  map[string]any{"$ref": "#/components/schemas/MarketDataSource"},
+			"signals": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/SignalResult"}},
+		},
+	}
+}
+
+func signalResultSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"code", "name", "signal"},
+		"properties": map[string]any{
+			"code":   map[string]any{"type": "string", "example": "300750.SZ"},
+			"name":   map[string]any{"type": "string", "example": "宁德时代"},
+			"signal": map[string]any{"type": "string", "enum": []string{"volume_surge", "breakout", "new_high", "strong"}},
 		},
 	}
 }

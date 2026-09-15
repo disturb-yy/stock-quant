@@ -34,6 +34,16 @@ func newRouterWithMarket(applicationLogger *slog.Logger, overviewReader interfac
 }, sectorReader interface {
 	Sectors(context.Context) (market.MarketSectors, error)
 }, statusReaders ...demo.StatusReader) *gin.Engine {
+	return newRouterWithMarketAndSignals(applicationLogger, overviewReader, sectorReader, nil, statusReaders...)
+}
+
+func newRouterWithMarketAndSignals(applicationLogger *slog.Logger, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
+}, signalReader interface {
+	Scan(context.Context, market.SignalRequest) (market.MarketSignals, error)
+}, statusReaders ...demo.StatusReader) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(logger.GinMiddleware(applicationLogger), gin.CustomRecovery(apiV1RecoveryHandler))
@@ -46,6 +56,7 @@ func newRouterWithMarket(applicationLogger *slog.Logger, overviewReader interfac
 	health.RegisterRoutes(apiV1)
 	market.RegisterRoutes(apiV1, overviewReader)
 	market.RegisterSectorRoutes(apiV1, sectorReader)
+	market.RegisterSignalRoutes(apiV1, signalReader)
 	if len(statusReaders) > 0 {
 		demo.RegisterRoutes(apiV1, statusReaders[0])
 	}
@@ -73,9 +84,19 @@ func newHTTPServerWithMarket(applicationLogger *slog.Logger, address string, ove
 }, sectorReader interface {
 	Sectors(context.Context) (market.MarketSectors, error)
 }, statusReaders ...demo.StatusReader) *http.Server {
+	return newHTTPServerWithMarketAndSignals(applicationLogger, address, overviewReader, sectorReader, nil, statusReaders...)
+}
+
+func newHTTPServerWithMarketAndSignals(applicationLogger *slog.Logger, address string, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
+}, signalReader interface {
+	Scan(context.Context, market.SignalRequest) (market.MarketSignals, error)
+}, statusReaders ...demo.StatusReader) *http.Server {
 	return &http.Server{
 		Addr:    address,
-		Handler: newRouterWithMarket(applicationLogger, overviewReader, sectorReader, statusReaders...),
+		Handler: newRouterWithMarketAndSignals(applicationLogger, overviewReader, sectorReader, signalReader, statusReaders...),
 	}
 }
 
