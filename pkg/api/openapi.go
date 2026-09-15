@@ -29,6 +29,7 @@ func apiPaths(includeDevelopment bool) map[string]any {
 		"/api/v1/markets/overview": marketOverviewPath(),
 		"/api/v1/markets/sectors":  marketSectorsPath(),
 		"/api/v1/markets/signals":  marketSignalsPath(),
+		"/api/v1/markets/rankings": marketRankingsPath(),
 		"/api/v1/openapi.json":     openAPIPath(),
 	}
 	if includeDevelopment {
@@ -152,6 +153,37 @@ func marketSignalsPath() map[string]any {
 	}
 }
 
+func marketRankingsPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "getMarketRankings",
+			"summary":     "读取股票排行榜",
+			"parameters": []any{
+				map[string]any{
+					"name": "metric", "in": "query", "required": true,
+					"schema": map[string]any{"type": "string", "enum": []string{"gain", "loss", "turnover_amount", "turnover_rate"}},
+				},
+				map[string]any{
+					"name": "page", "in": "query", "required": false,
+					"schema": map[string]any{"type": "integer", "minimum": DefaultPage, "default": DefaultPage},
+				},
+				map[string]any{
+					"name": "page_size", "in": "query", "required": false,
+					"schema": map[string]any{"type": "integer", "minimum": 1, "maximum": MaxPageSize, "default": DefaultPageSize},
+				},
+			},
+			"responses": map[string]any{
+				"200": jsonReferenceResponse("股票排行榜", "#/components/schemas/MarketRankings"),
+				"400": errorResponse("排行指标或分页参数无效"),
+				"404": errorResponse("请求的资源不存在"),
+				"405": errorResponse("请求方法不被允许"),
+				"422": errorResponse("历史行情不足"),
+				"503": errorResponse("股票排行数据不可用"),
+			},
+		},
+	}
+}
+
 func jsonReferenceResponse(description, reference string) map[string]any {
 	return map[string]any{
 		"description": description,
@@ -186,6 +218,8 @@ func apiComponents() map[string]any {
 			"MarketSignals":     marketSignalsSchema(),
 			"SignalParameters":  signalParametersSchema(),
 			"SignalResult":      signalResultSchema(),
+			"MarketRankings":    marketRankingsSchema(),
+			"MarketRanking":     marketRankingSchema(),
 		},
 	}
 }
@@ -482,6 +516,38 @@ func signalResultSchema() map[string]any {
 			"code":   map[string]any{"type": "string", "example": "300750.SZ"},
 			"name":   map[string]any{"type": "string", "example": "宁德时代"},
 			"signal": map[string]any{"type": "string", "enum": []string{"volume_surge", "breakout", "new_high", "strong"}},
+		},
+	}
+}
+
+func marketRankingsSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"metric", "as_of", "source", "data", "pagination"},
+		"properties": map[string]any{
+			"metric":     map[string]any{"type": "string", "enum": []string{"gain", "loss", "turnover_amount", "turnover_rate"}},
+			"as_of":      map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
+			"source":     map[string]any{"$ref": "#/components/schemas/MarketDataSource"},
+			"data":       map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/MarketRanking"}},
+			"pagination": map[string]any{"$ref": "#/components/schemas/PaginationMeta"},
+		},
+	}
+}
+
+func marketRankingSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"rank", "code", "name", "value", "close", "change", "change_percent", "turnover_amount", "turnover_rate"},
+		"properties": map[string]any{
+			"rank":            map[string]any{"type": "integer", "minimum": 1, "example": 1},
+			"code":            map[string]any{"type": "string", "example": "300750.SZ"},
+			"name":            map[string]any{"type": "string", "example": "宁德时代"},
+			"value":           map[string]any{"type": "string", "description": "当前 metric 对应的排行值", "example": "21.42"},
+			"close":           map[string]any{"type": "string", "example": "190.12"},
+			"change":          map[string]any{"type": "string", "example": "2.67"},
+			"change_percent":  map[string]any{"type": "string", "example": "1.42"},
+			"turnover_amount": map[string]any{"type": "string", "example": "7633021600.00"},
+			"turnover_rate":   map[string]any{"type": "string", "example": "3.42"},
 		},
 	}
 }

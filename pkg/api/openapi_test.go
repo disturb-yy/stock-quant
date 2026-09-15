@@ -34,7 +34,7 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if document.Info.Version != "v1" {
 		t.Fatalf("info.version = %q, want %q", document.Info.Version, "v1")
 	}
-	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/openapi.json"} {
+	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/openapi.json"} {
 		if _, ok := document.Paths[path]; !ok {
 			t.Fatalf("OpenAPI paths missing %q", path)
 		}
@@ -42,9 +42,52 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if _, ok := document.Paths["/api/v1/dev/demo-status"]; !ok {
 		t.Fatal("OpenAPI paths missing development demo status")
 	}
-	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult"} {
+	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult", "MarketRankings", "MarketRanking"} {
 		if _, ok := document.Components.Schemas[schema]; !ok {
 			t.Fatalf("OpenAPI schemas missing %q", schema)
+		}
+	}
+}
+
+func TestOpenAPIMarketRankingsContract(t *testing.T) {
+	document := OpenAPIDocument()
+	paths := document["paths"].(map[string]any)
+	get := paths["/api/v1/markets/rankings"].(map[string]any)["get"].(map[string]any)
+	if get["operationId"] != "getMarketRankings" {
+		t.Fatalf("market rankings operation = %#v, want getMarketRankings", get["operationId"])
+	}
+	parameters := get["parameters"].([]any)
+	if len(parameters) != 3 {
+		t.Fatalf("market rankings parameter count = %d, want 3", len(parameters))
+	}
+	metric := parameters[0].(map[string]any)
+	if metric["name"] != "metric" || metric["required"] != true {
+		t.Fatalf("metric parameter = %#v, want required metric", metric)
+	}
+	if got := metric["schema"].(map[string]any)["enum"].([]string); len(got) != 4 || got[0] != "gain" || got[3] != "turnover_rate" {
+		t.Fatalf("metric enum = %#v, want four ranking metrics", got)
+	}
+	pageSchema := parameters[1].(map[string]any)["schema"].(map[string]any)
+	pageSizeSchema := parameters[2].(map[string]any)["schema"].(map[string]any)
+	if pageSchema["default"] != DefaultPage || pageSizeSchema["default"] != DefaultPageSize || pageSizeSchema["maximum"] != MaxPageSize {
+		t.Fatalf("ranking pagination schema = %#v/%#v, want FND-002 defaults and boundary", pageSchema, pageSizeSchema)
+	}
+	responses := get["responses"].(map[string]any)
+	for _, status := range []string{"200", "400", "404", "405", "422", "503"} {
+		if _, ok := responses[status]; !ok {
+			t.Fatalf("market rankings responses missing %s", status)
+		}
+	}
+	responseSchema := responses["200"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)
+	if responseSchema["$ref"] != "#/components/schemas/MarketRankings" {
+		t.Fatalf("market rankings response schema = %#v, want MarketRankings", responseSchema)
+	}
+	components := document["components"].(map[string]any)["schemas"].(map[string]any)
+	ranking := components["MarketRanking"].(map[string]any)
+	properties := ranking["properties"].(map[string]any)
+	for _, field := range []string{"rank", "code", "name", "value", "close", "change", "change_percent", "turnover_amount", "turnover_rate"} {
+		if _, ok := properties[field]; !ok {
+			t.Fatalf("MarketRanking missing property %q", field)
 		}
 	}
 }

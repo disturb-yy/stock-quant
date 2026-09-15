@@ -66,6 +66,17 @@ func DemoFixture() Fixture {
 			{InstrumentCode: "300750.SZ", MetricDate: SeedAsOf, MetricName: "roe", MetricValue: "18.26"},
 			{InstrumentCode: "600519.SH", MetricDate: SeedAsOf, MetricName: "pe_ttm", MetricValue: "28.63"},
 			{InstrumentCode: "600519.SH", MetricDate: SeedAsOf, MetricName: "roe", MetricValue: "31.42"},
+			// 换手率属于版本化演示 daily basic，不得作为实时行情使用。
+			{InstrumentCode: "000001.SZ", MetricDate: SeedAsOf, MetricName: "turnover_rate", MetricValue: "1.86"},
+			{InstrumentCode: "300750.SZ", MetricDate: SeedAsOf, MetricName: "turnover_rate", MetricValue: "3.54"},
+			{InstrumentCode: "600519.SH", MetricDate: SeedAsOf, MetricName: "turnover_rate", MetricValue: "0.43"},
+			{InstrumentCode: "000002.SZ", MetricDate: SeedAsOf, MetricName: "turnover_rate", MetricValue: "4.50"},
+			{InstrumentCode: "000858.SZ", MetricDate: SeedAsOf, MetricName: "turnover_rate", MetricValue: "2.24"},
+			{InstrumentCode: "002594.SZ", MetricDate: SeedAsOf, MetricName: "turnover_rate", MetricValue: "2.78"},
+			{InstrumentCode: "601318.SH", MetricDate: SeedAsOf, MetricName: "turnover_rate", MetricValue: "0.96"},
+			{InstrumentCode: "601398.SH", MetricDate: SeedAsOf, MetricName: "turnover_rate", MetricValue: "0.51"},
+			{InstrumentCode: "601166.SH", MetricDate: SeedAsOf, MetricName: "turnover_rate", MetricValue: "1.34"},
+			{InstrumentCode: "600036.SH", MetricDate: SeedAsOf, MetricName: "turnover_rate", MetricValue: "1.12"},
 		},
 		IndexSnapshots: []marketdomain.IndexSnapshot{
 			{Code: "000001.SH", Name: "上证指数", TradeDate: SeedAsOf, ObservedAt: SeedObservedAt, Close: "2994.73", Change: "-3.89", ChangePercent: "-0.13"},

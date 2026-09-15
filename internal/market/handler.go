@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/disturb-yy/stock-quant/pkg/api"
 	"github.com/gin-gonic/gin"
@@ -13,6 +14,7 @@ const (
 	overviewPath = "/markets/overview"
 	sectorsPath  = "/markets/sectors"
 	signalsPath  = "/markets/signals"
+	rankingsPath = "/markets/rankings"
 )
 
 // RegisterRoutes 注册市场概览 HTTP 路由。
@@ -83,6 +85,69 @@ func RegisterSignalRoutes(router *gin.RouterGroup, scanner interface {
 		}
 		context.JSON(http.StatusOK, result)
 	})
+}
+
+// RegisterRankingRoutes 注册股票排行 HTTP 路由。
+func RegisterRankingRoutes(router *gin.RouterGroup, query interface {
+	Rank(context.Context, RankingRequest) (MarketRankings, error)
+}) {
+	if query == nil {
+		return
+	}
+	router.GET(rankingsPath, func(context *gin.Context) {
+		request, err := rankingRequestFromQuery(context)
+		if err != nil {
+			writeRankingRequestError(context, err)
+			return
+		}
+		result, err := query.Rank(context.Request.Context(), request)
+		if err != nil {
+			writeRankingError(context, err)
+			return
+		}
+		context.JSON(http.StatusOK, result)
+	})
+}
+
+func rankingRequestFromQuery(context *gin.Context) (RankingRequest, error) {
+	values := context.Request.URL.Query()
+	metricValues, ok := values["metric"]
+	if !ok || len(metricValues) != 1 || strings.TrimSpace(metricValues[0]) == "" {
+		return RankingRequest{}, &RankingValidationError{Fields: map[string]string{"metric": "必须提供且只能提供一次"}}
+	}
+	pagination, err := api.ParsePagination(values)
+	if err != nil {
+		return RankingRequest{}, err
+	}
+	return RankingRequest{Metric: metricValues[0], Page: pagination.Page, PageSize: pagination.PageSize}, nil
+}
+
+func writeRankingRequestError(context *gin.Context, err error) {
+	var paginationError *api.PaginationValidationError
+	if errors.As(err, &paginationError) {
+		context.AbortWithStatusJSON(http.StatusBadRequest, api.NewErrorResponse(api.CodeInvalidPagination, "分页参数无效", paginationError.Details()))
+		return
+	}
+	var validationError *RankingValidationError
+	if errors.As(err, &validationError) {
+		context.AbortWithStatusJSON(http.StatusBadRequest, api.NewErrorResponse(api.CodeValidation, "排行参数无效", validationError.Details()))
+		return
+	}
+	context.AbortWithStatusJSON(http.StatusBadRequest, api.NewErrorResponse(api.CodeValidation, "请求参数校验失败", nil))
+}
+
+func writeRankingError(context *gin.Context, err error) {
+	var validationError *RankingValidationError
+	if errors.As(err, &validationError) {
+		context.AbortWithStatusJSON(http.StatusBadRequest, api.NewErrorResponse(api.CodeValidation, "排行参数无效", validationError.Details()))
+		return
+	}
+	var historyError *RankingHistoryError
+	if errors.As(err, &historyError) {
+		context.AbortWithStatusJSON(http.StatusUnprocessableEntity, api.NewErrorResponse(api.CodeInsufficientHistory, "历史行情不足", historyError.Details()))
+		return
+	}
+	context.AbortWithStatusJSON(http.StatusServiceUnavailable, api.NewErrorResponse(api.CodeDependencyUnavailable, "股票排行数据暂不可用", nil))
 }
 
 func signalRequestFromQuery(context *gin.Context) (SignalRequest, error) {

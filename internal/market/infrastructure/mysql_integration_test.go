@@ -9,6 +9,7 @@ import (
 	"github.com/disturb-yy/stock-quant/internal/demo"
 	demoinfrastructure "github.com/disturb-yy/stock-quant/internal/demo/infrastructure"
 	"github.com/disturb-yy/stock-quant/internal/market"
+	marketdomain "github.com/disturb-yy/stock-quant/internal/market/domain"
 )
 
 // TestMySQLOverviewReader 只在显式提供测试数据库时验证真实查询和聚合结果。
@@ -134,6 +135,26 @@ func TestMySQLOverviewReader(t *testing.T) {
 	for _, sector := range sectors.Sectors {
 		if sector.ChangePercent != wantChanges[sector.Code] || sector.ComponentCount != 1 || sector.Leader.Code == "" || sector.Leader.Name == "" {
 			t.Fatalf("sector = %#v, want seeded performance and leader", sector)
+		}
+	}
+	rankingSnapshot, err := reader.ReadRankingSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("ReadRankingSnapshot() error = %v", err)
+	}
+	if rankingSnapshot.AsOf != demo.SeedAsOf || rankingSnapshot.SeedVersion != demo.SeedVersion || len(rankingSnapshot.Observations) != len(fixture.Instruments) {
+		t.Fatalf("ranking snapshot = %#v, want all seeded latest observations", rankingSnapshot)
+	}
+	rankingService, err := market.NewRankingService(reader, market.ProviderSelection{Mode: market.ModeDemo, Provider: market.DemoProviderName})
+	if err != nil {
+		t.Fatalf("NewRankingService() error = %v", err)
+	}
+	for _, metric := range []string{"gain", "loss", "turnover_amount", "turnover_rate"} {
+		result, err := rankingService.Rank(context.Background(), market.RankingRequest{Metric: metric, Page: 1, PageSize: 3})
+		if err != nil {
+			t.Fatalf("Rank(%q) error = %v", metric, err)
+		}
+		if result.Metric != marketdomain.RankingMetric(metric) || result.Pagination.Total != int64(len(fixture.Instruments)) || len(result.Data) != 3 {
+			t.Fatalf("ranking %q result = %#v, want first page of seeded rankings", metric, result)
 		}
 	}
 }

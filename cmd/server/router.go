@@ -44,6 +44,18 @@ func newRouterWithMarketAndSignals(applicationLogger *slog.Logger, overviewReade
 }, signalReader interface {
 	Scan(context.Context, market.SignalRequest) (market.MarketSignals, error)
 }, statusReaders ...demo.StatusReader) *gin.Engine {
+	return newRouterWithMarketSignalsAndRankings(applicationLogger, overviewReader, sectorReader, signalReader, nil, statusReaders...)
+}
+
+func newRouterWithMarketSignalsAndRankings(applicationLogger *slog.Logger, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
+}, signalReader interface {
+	Scan(context.Context, market.SignalRequest) (market.MarketSignals, error)
+}, rankingReader interface {
+	Rank(context.Context, market.RankingRequest) (market.MarketRankings, error)
+}, statusReaders ...demo.StatusReader) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(logger.GinMiddleware(applicationLogger), gin.CustomRecovery(apiV1RecoveryHandler))
@@ -57,6 +69,7 @@ func newRouterWithMarketAndSignals(applicationLogger *slog.Logger, overviewReade
 	market.RegisterRoutes(apiV1, overviewReader)
 	market.RegisterSectorRoutes(apiV1, sectorReader)
 	market.RegisterSignalRoutes(apiV1, signalReader)
+	market.RegisterRankingRoutes(apiV1, rankingReader)
 	if len(statusReaders) > 0 {
 		demo.RegisterRoutes(apiV1, statusReaders[0])
 	}
@@ -97,6 +110,21 @@ func newHTTPServerWithMarketAndSignals(applicationLogger *slog.Logger, address s
 	return &http.Server{
 		Addr:    address,
 		Handler: newRouterWithMarketAndSignals(applicationLogger, overviewReader, sectorReader, signalReader, statusReaders...),
+	}
+}
+
+func newHTTPServerWithMarketSignalsAndRankings(applicationLogger *slog.Logger, address string, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
+}, signalReader interface {
+	Scan(context.Context, market.SignalRequest) (market.MarketSignals, error)
+}, rankingReader interface {
+	Rank(context.Context, market.RankingRequest) (market.MarketRankings, error)
+}, statusReaders ...demo.StatusReader) *http.Server {
+	return &http.Server{
+		Addr:    address,
+		Handler: newRouterWithMarketSignalsAndRankings(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, statusReaders...),
 	}
 }
 
