@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"testing"
 
@@ -42,6 +43,13 @@ func TestMySQLOverviewReader(t *testing.T) {
 	}
 	if err := store.SeedDemo(context.Background(), fixture); err != nil {
 		t.Fatalf("repeat seed: %v", err)
+	}
+	var factorCount int64
+	if err := database.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM daily_adjustment_factors`).Scan(&factorCount); err != nil {
+		t.Fatalf("count adjustment factors: %v", err)
+	}
+	if factorCount != int64(len(fixture.AdjustmentFactors)) {
+		t.Fatalf("adjustment factor count = %d, want %d", factorCount, len(fixture.AdjustmentFactors))
 	}
 	var sectorCount, membershipCount int64
 	if err := database.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM sector_categories`).Scan(&sectorCount); err != nil {
@@ -156,5 +164,65 @@ func TestMySQLOverviewReader(t *testing.T) {
 		if result.Metric != marketdomain.RankingMetric(metric) || result.Pagination.Total != int64(len(fixture.Instruments)) || len(result.Data) != 3 {
 			t.Fatalf("ranking %q result = %#v, want first page of seeded rankings", metric, result)
 		}
+	}
+	barsService, err := market.NewBarsService(reader, market.ProviderSelection{Mode: market.ModeDemo, Provider: market.DemoProviderName})
+	if err != nil {
+		t.Fatalf("NewBarsService() error = %v", err)
+	}
+	stockBars, err := barsService.Bars(context.Background(), market.BarsRequest{Symbol: "000001.SZ", Adjust: "qfq", Range: "120d", Benchmark: "000300.SH"})
+	if err != nil {
+		t.Fatalf("qfq stock Bars() error = %v", err)
+	}
+	if len(stockBars.Bars) != 120 || stockBars.Bars[0].TradeDate >= stockBars.Bars[len(stockBars.Bars)-1].TradeDate {
+		t.Fatalf("stock bars count/order = %d/%q-%q, want 120 ascending bars", len(stockBars.Bars), stockBars.Bars[0].TradeDate, stockBars.Bars[len(stockBars.Bars)-1].TradeDate)
+	}
+	if stockBars.Benchmark == nil || len(stockBars.Benchmark.Points) != 120 {
+		t.Fatalf("benchmark points = %#v, want 120 common points", stockBars.Benchmark)
+	}
+	rawBars, err := barsService.Bars(context.Background(), market.BarsRequest{Symbol: "000001.SZ", Adjust: "none", Range: "120d"})
+	if err != nil {
+		t.Fatalf("none stock Bars() error = %v", err)
+	}
+	if rawBars.Bars[0].Close == stockBars.Bars[0].Close || rawBars.Bars[len(rawBars.Bars)-1].Volume != stockBars.Bars[len(stockBars.Bars)-1].Volume {
+		t.Fatalf("raw/qfq bars = %#v/%#v, want adjusted price difference and unchanged volume", rawBars.Bars[0], stockBars.Bars[0])
+	}
+	hfqBars, err := barsService.Bars(context.Background(), market.BarsRequest{Symbol: "000001.SZ", Adjust: "hfq", Range: "120d"})
+	if err != nil {
+		t.Fatalf("hfq stock Bars() error = %v", err)
+	}
+	if hfqBars.Bars[0].Close == rawBars.Bars[0].Close || hfqBars.Bars[len(hfqBars.Bars)-1].Volume != rawBars.Bars[len(rawBars.Bars)-1].Volume {
+		t.Fatalf("raw/hfq bars = %#v/%#v, want adjusted price difference and unchanged volume", rawBars.Bars[0], hfqBars.Bars[0])
+	}
+	for _, test := range []struct {
+		name string
+		want int
+	}{
+		{name: "20d", want: 20}, {name: "60d", want: 60}, {name: "120d", want: 120}, {name: "all", want: 121},
+	} {
+		result, err := barsService.Bars(context.Background(), market.BarsRequest{Symbol: "000001.SZ", Range: test.name})
+		if err != nil {
+			t.Fatalf("range %s Bars() error = %v", test.name, err)
+		}
+		if len(result.Bars) != test.want {
+			t.Fatalf("range %s bars = %d, want %d", test.name, len(result.Bars), test.want)
+		}
+	}
+	exactBars, err := barsService.Bars(context.Background(), market.BarsRequest{Symbol: "000001.SZ", From: "2024-06-27", To: "2024-06-28", Benchmark: "000300.SH"})
+	if err != nil {
+		t.Fatalf("exact stock Bars() error = %v", err)
+	}
+	if len(exactBars.Bars) != 2 || exactBars.Bars[0].TradeDate != "2024-06-27" || exactBars.Bars[1].TradeDate != "2024-06-28" || len(exactBars.Benchmark.Points) != 2 {
+		t.Fatalf("exact bars = %#v, benchmark = %#v, want closed two-day range", exactBars.Bars, exactBars.Benchmark)
+	}
+	emptyBars, err := barsService.Bars(context.Background(), market.BarsRequest{Symbol: "000001.SZ", From: "2025-01-01", To: "2025-01-02"})
+	if err != nil {
+		t.Fatalf("empty stock Bars() error = %v", err)
+	}
+	if emptyBars.Bars == nil || len(emptyBars.Bars) != 0 || emptyBars.EffectiveRange.From != nil || emptyBars.EffectiveRange.To != nil {
+		t.Fatalf("empty bars = %#v, want 200-compatible empty response", emptyBars)
+	}
+	_, err = barsService.Bars(context.Background(), market.BarsRequest{Symbol: "999999.SZ"})
+	if !errors.Is(err, market.ErrBarsInstrumentNotFound) {
+		t.Fatalf("unknown stock error = %v, want ErrBarsInstrumentNotFound", err)
 	}
 }

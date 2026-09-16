@@ -111,6 +111,7 @@ internal/auth/
 | 修改股票 HTTP API | `internal/stock/handler.go` |
 | 修改股票 MySQL 存储 | `internal/stock/infrastructure/repository_mysql.go` |
 | 修改股票详情概览 | `internal/stock/overview.go`、`internal/stock/handler.go`、`internal/stock/infrastructure/mysql_overview.go` |
+| 修改股票研究型日线、复权或基准表现 | `internal/market/bars.go`、`internal/market/domain/chart.go`、`internal/market/infrastructure/mysql_bars.go` |
 | 修改行情模型 | `internal/market/domain` |
 | 修改行情同步流程 | `internal/market` |
 | 修改市场概览查询 | `internal/market/service.go`、`internal/market/handler.go` |

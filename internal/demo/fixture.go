@@ -14,7 +14,7 @@ const (
 	// SeedName 是数据库中演示数据元数据的稳定名称。
 	SeedName = "fnd-003-demo"
 	// SeedVersion 是本 US 的可追踪 fixture 版本。
-	SeedVersion = "fnd-003-demo-v5"
+	SeedVersion = "fnd-003-demo-v6"
 	// SeedAsOf 是 fixture 的统一观测日期。
 	SeedAsOf = "2024-06-28"
 	// SeedObservedAt 是 Seed 数据统一的 UTC 观测时间。
@@ -38,6 +38,7 @@ type Fixture struct {
 	Sectors           []marketdomain.Sector
 	SectorMemberships []marketdomain.SectorMembership
 	DailyBars         []marketdomain.DailyBar
+	AdjustmentFactors []marketdomain.AdjustmentFactor
 	DailyBasics       []marketdomain.DailyBasic
 	FinancialMetrics  []analysisdomain.FinancialMetric
 	IndexSnapshots    []marketdomain.IndexSnapshot
@@ -60,7 +61,8 @@ func DemoFixture() Fixture {
 			{SectorCode: "EQUIPMENT", InstrumentCode: "300750.SZ"},
 			{SectorCode: "FOOD_BEVERAGE", InstrumentCode: "600519.SH"},
 		},
-		DailyBars: signalFixtureDailyBars(plans),
+		DailyBars:         signalFixtureDailyBars(plans),
+		AdjustmentFactors: signalFixtureAdjustmentFactors(plans),
 		DailyBasics: []marketdomain.DailyBasic{
 			{InstrumentCode: "000001.SZ", TradeDate: SeedAsOf, MarketCap: "203425.00", PB: "0.48"},
 			{InstrumentCode: "300750.SZ", TradeDate: SeedAsOf, MarketCap: "887612.00", PB: "3.92"},
@@ -85,12 +87,7 @@ func DemoFixture() Fixture {
 			{InstrumentCode: "601166.SH", MetricDate: SeedAsOf, MetricName: "turnover_rate", Basis: "latest_daily_basic", MetricValue: "1.34"},
 			{InstrumentCode: "600036.SH", MetricDate: SeedAsOf, MetricName: "turnover_rate", Basis: "latest_daily_basic", MetricValue: "1.12"},
 		},
-		IndexSnapshots: []marketdomain.IndexSnapshot{
-			{Code: "000001.SH", Name: "上证指数", TradeDate: SeedAsOf, ObservedAt: SeedObservedAt, Close: "2994.73", Change: "-3.89", ChangePercent: "-0.13"},
-			{Code: "399001.SZ", Name: "深证成指", TradeDate: SeedAsOf, ObservedAt: SeedObservedAt, Close: "8848.42", Change: "-25.67", ChangePercent: "-0.29"},
-			{Code: "399006.SZ", Name: "创业板指", TradeDate: SeedAsOf, ObservedAt: SeedObservedAt, Close: "1683.34", Change: "-8.12", ChangePercent: "-0.48"},
-			{Code: "000300.SH", Name: "沪深300", TradeDate: SeedAsOf, ObservedAt: SeedObservedAt, Close: "3401.76", Change: "-5.87", ChangePercent: "-0.17"},
-		},
+		IndexSnapshots: demoFixtureIndexSnapshots(),
 	}
 }
 
@@ -139,6 +136,44 @@ func signalFixtureDailyBars(plans []signalFixturePlan) []marketdomain.DailyBar {
 		}
 	}
 	return bars
+}
+
+func signalFixtureAdjustmentFactors(plans []signalFixturePlan) []marketdomain.AdjustmentFactor {
+	dates := signalFixtureTradingDates(121)
+	factors := make([]marketdomain.AdjustmentFactor, 0, len(plans)*len(dates))
+	for _, plan := range plans {
+		for index, date := range dates {
+			qfqFactor, hfqFactor := "1.00", "1.00"
+			if plan.Code == "000001.SZ" && index < 60 {
+				qfqFactor, hfqFactor = "0.95", "1.10"
+			}
+			factors = append(factors, marketdomain.AdjustmentFactor{
+				InstrumentCode: plan.Code, TradeDate: date, QFQFactor: qfqFactor, HFQFactor: hfqFactor,
+			})
+		}
+	}
+	return factors
+}
+
+func demoFixtureIndexSnapshots() []marketdomain.IndexSnapshot {
+	snapshots := []marketdomain.IndexSnapshot{
+		{Code: "000001.SH", Name: "上证指数", TradeDate: SeedAsOf, ObservedAt: SeedObservedAt, Close: "2994.73", Change: "-3.89", ChangePercent: "-0.13"},
+		{Code: "399001.SZ", Name: "深证成指", TradeDate: SeedAsOf, ObservedAt: SeedObservedAt, Close: "8848.42", Change: "-25.67", ChangePercent: "-0.29"},
+		{Code: "399006.SZ", Name: "创业板指", TradeDate: SeedAsOf, ObservedAt: SeedObservedAt, Close: "1683.34", Change: "-8.12", ChangePercent: "-0.48"},
+	}
+	dates := signalFixtureTradingDates(121)
+	for index, date := range dates {
+		close := 3200.00 + 205.00*float64(index)/float64(len(dates)-1)
+		change, changePercent := "1.50", "0.05"
+		if index == len(dates)-1 {
+			close, change, changePercent = 3401.76, "-5.87", "-0.17"
+		}
+		snapshots = append(snapshots, marketdomain.IndexSnapshot{
+			Code: "000300.SH", Name: "沪深300", TradeDate: date, ObservedAt: SeedObservedAt,
+			Close: formatFixturePrice(close), Change: change, ChangePercent: changePercent,
+		})
+	}
+	return snapshots
 }
 
 func signalFixtureTradingDates(count int) []string {
@@ -237,6 +272,9 @@ func (fixture Fixture) Validate() error {
 			return fmt.Errorf("validate daily bar %q/%q: %w", bar.InstrumentCode, bar.TradeDate, err)
 		}
 	}
+	if err := validateAdjustmentFactors(fixture); err != nil {
+		return err
+	}
 	for _, basic := range fixture.DailyBasics {
 		if err := basic.Validate(); err != nil {
 			return fmt.Errorf("validate daily basic %q/%q: %w", basic.InstrumentCode, basic.TradeDate, err)
@@ -250,6 +288,27 @@ func (fixture Fixture) Validate() error {
 	for _, index := range fixture.IndexSnapshots {
 		if err := index.Validate(); err != nil {
 			return fmt.Errorf("validate index snapshot %q: %w", index.Code, err)
+		}
+	}
+	return nil
+}
+
+func validateAdjustmentFactors(fixture Fixture) error {
+	factors := make(map[string]struct{}, len(fixture.AdjustmentFactors))
+	for _, factor := range fixture.AdjustmentFactors {
+		if err := factor.Validate(); err != nil {
+			return fmt.Errorf("validate adjustment factor %q/%q: %w", factor.InstrumentCode, factor.TradeDate, err)
+		}
+		key := factor.InstrumentCode + "\x00" + factor.TradeDate
+		if _, exists := factors[key]; exists {
+			return fmt.Errorf("duplicate adjustment factor %q/%q", factor.InstrumentCode, factor.TradeDate)
+		}
+		factors[key] = struct{}{}
+	}
+	for _, bar := range fixture.DailyBars {
+		key := bar.InstrumentCode + "\x00" + bar.TradeDate
+		if _, exists := factors[key]; !exists {
+			return fmt.Errorf("daily bar %q/%q has no adjustment factor", bar.InstrumentCode, bar.TradeDate)
 		}
 	}
 	return nil

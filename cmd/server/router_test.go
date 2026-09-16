@@ -295,7 +295,7 @@ func TestOpenAPIEndpointOverHTTP(t *testing.T) {
 	if document.OpenAPI != "3.0.3" {
 		t.Fatalf("openapi = %q, want %q", document.OpenAPI, "3.0.3")
 	}
-	for _, path := range []string{"/api/v1/health", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/stocks/{symbol}", "/api/v1/openapi.json"} {
+	for _, path := range []string{"/api/v1/health", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/stocks/{symbol}", "/api/v1/stocks/{symbol}/bars", "/api/v1/openapi.json"} {
 		if _, ok := document.Paths[path]; !ok {
 			t.Fatalf("OpenAPI response missing path %q", path)
 		}

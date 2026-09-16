@@ -25,13 +25,14 @@ func apiInfo() map[string]any {
 
 func apiPaths(includeDevelopment bool) map[string]any {
 	paths := map[string]any{
-		"/api/v1/health":           healthPath(),
-		"/api/v1/markets/overview": marketOverviewPath(),
-		"/api/v1/markets/sectors":  marketSectorsPath(),
-		"/api/v1/markets/signals":  marketSignalsPath(),
-		"/api/v1/markets/rankings": marketRankingsPath(),
-		"/api/v1/stocks/{symbol}":  stockOverviewPath(),
-		"/api/v1/openapi.json":     openAPIPath(),
+		"/api/v1/health":               healthPath(),
+		"/api/v1/markets/overview":     marketOverviewPath(),
+		"/api/v1/markets/sectors":      marketSectorsPath(),
+		"/api/v1/markets/signals":      marketSignalsPath(),
+		"/api/v1/markets/rankings":     marketRankingsPath(),
+		"/api/v1/stocks/{symbol}":      stockOverviewPath(),
+		"/api/v1/stocks/{symbol}/bars": stockBarsPath(),
+		"/api/v1/openapi.json":         openAPIPath(),
 	}
 	if includeDevelopment {
 		paths["/api/v1/dev/demo-status"] = demoStatusPath()
@@ -208,6 +209,72 @@ func stockOverviewPath() map[string]any {
 	}
 }
 
+func stockBarsPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "getStockBars",
+			"summary":     "读取股票研究型日线",
+			"parameters": []any{
+				map[string]any{
+					"name": "symbol", "in": "path", "required": true,
+					"description": "直接使用 Markets API 返回的 code，不做前端转换。",
+					"schema":      map[string]any{"type": "string", "pattern": "^[A-Za-z0-9]{1,16}\\.[A-Za-z]{2,8}$", "example": "000001.SZ"},
+				},
+				map[string]any{
+					"name": "timeframe", "in": "query", "required": false,
+					"schema": map[string]any{"type": "string", "enum": []string{"1d"}, "default": "1d"},
+				},
+				map[string]any{
+					"name": "adjust", "in": "query", "required": false,
+					"schema": map[string]any{"type": "string", "enum": []string{"none", "qfq", "hfq"}, "default": "none"},
+				},
+				map[string]any{
+					"name": "range", "in": "query", "required": false,
+					"description": "与 from/to 互斥；省略时使用最近 120 个交易日。",
+					"schema":      map[string]any{"type": "string", "enum": []string{"20d", "60d", "120d", "all"}, "default": "120d"},
+				},
+				map[string]any{
+					"name": "from", "in": "query", "required": false,
+					"schema": map[string]any{"type": "string", "format": "date", "example": "2024-06-03"},
+				},
+				map[string]any{
+					"name": "to", "in": "query", "required": false,
+					"schema": map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
+				},
+				map[string]any{
+					"name": "benchmark", "in": "query", "required": false,
+					"schema": map[string]any{"type": "string", "enum": []string{"000300.SH"}, "example": "000300.SH"},
+				},
+			},
+			"responses": map[string]any{
+				"200": stockBarsResponse(),
+				"400": errorResponse("股票行情参数无效"),
+				"404": errorResponse("股票不存在"),
+				"405": errorResponse("请求方法不被允许"),
+				"503": errorResponse("股票行情数据不可用"),
+			},
+		},
+	}
+}
+
+func stockBarsResponse() map[string]any {
+	return map[string]any{
+		"description": "股票研究型日线",
+		"content": map[string]any{
+			"application/json": map[string]any{
+				"schema": map[string]any{"$ref": "#/components/schemas/StockBars"},
+				"example": map[string]any{
+					"symbol": "000001.SZ", "name": "平安银行", "timeframe": "1d", "adjust": "none",
+					"effective_range": map[string]any{"from": "2024-06-27", "to": "2024-06-28"},
+					"bars":            []map[string]any{{"trade_date": "2024-06-27", "open": "10.12", "high": "10.28", "low": "10.05", "close": "10.22", "volume": int64(78210000), "ma5": nil, "ma20": nil}},
+					"benchmark":       nil,
+					"source":          map[string]any{"mode": "demo", "provider": "mysql-demo-fixture", "seed_version": "fnd-003-demo-v6"},
+				},
+			},
+		},
+	}
+}
+
 func jsonReferenceResponse(description, reference string) map[string]any {
 	return map[string]any{
 		"description": description,
@@ -250,6 +317,11 @@ func apiComponents() map[string]any {
 			"StockMetric":         stockMetricSchema(),
 			"StockSparkline":      stockSparklineSchema(),
 			"StockSparklinePoint": stockSparklinePointSchema(),
+			"StockBars":           stockBarsSchema(),
+			"StockBar":            stockBarSchema(),
+			"StockEffectiveRange": stockEffectiveRangeSchema(),
+			"StockBenchmark":      stockBenchmarkSchema(),
+			"StockBenchmarkPoint": stockBenchmarkPointSchema(),
 		},
 	}
 }
@@ -328,6 +400,77 @@ func stockSparklinePointSchema() map[string]any {
 			"high":       map[string]any{"type": "string", "example": "10.40"},
 			"low":        map[string]any{"type": "string", "example": "10.10"},
 			"close":      map[string]any{"type": "string", "example": "10.31"},
+		},
+	}
+}
+
+func stockBarsSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"symbol", "name", "timeframe", "adjust", "effective_range", "bars", "benchmark", "source"},
+		"properties": map[string]any{
+			"symbol":          map[string]any{"type": "string", "example": "000001.SZ"},
+			"name":            map[string]any{"type": "string", "example": "平安银行"},
+			"timeframe":       map[string]any{"type": "string", "enum": []string{"1d"}},
+			"adjust":          map[string]any{"type": "string", "enum": []string{"none", "qfq", "hfq"}},
+			"effective_range": map[string]any{"$ref": "#/components/schemas/StockEffectiveRange"},
+			"bars":            map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/StockBar"}},
+			"benchmark":       map[string]any{"$ref": "#/components/schemas/StockBenchmark", "nullable": true},
+			"source":          map[string]any{"$ref": "#/components/schemas/MarketDataSource"},
+		},
+	}
+}
+
+func stockBarSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"trade_date", "open", "high", "low", "close", "volume", "ma5", "ma20"},
+		"properties": map[string]any{
+			"trade_date": map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
+			"open":       map[string]any{"type": "string", "example": "10.22"},
+			"high":       map[string]any{"type": "string", "example": "10.36"},
+			"low":        map[string]any{"type": "string", "example": "10.18"},
+			"close":      map[string]any{"type": "string", "example": "10.31"},
+			"volume":     map[string]any{"type": "integer", "format": "int64", "minimum": 0, "example": int64(81540000)},
+			"ma5":        map[string]any{"type": "string", "nullable": true, "example": "10.08"},
+			"ma20":       map[string]any{"type": "string", "nullable": true, "example": "9.96"},
+		},
+	}
+}
+
+func stockEffectiveRangeSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"from", "to"},
+		"properties": map[string]any{
+			"from": map[string]any{"type": "string", "format": "date", "nullable": true},
+			"to":   map[string]any{"type": "string", "format": "date", "nullable": true},
+		},
+	}
+}
+
+func stockBenchmarkSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"code", "name", "points"},
+		"properties": map[string]any{
+			"code":   map[string]any{"type": "string", "enum": []string{"000300.SH"}},
+			"name":   map[string]any{"type": "string", "example": "沪深300"},
+			"points": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/StockBenchmarkPoint"}},
+		},
+	}
+}
+
+func stockBenchmarkPointSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"trade_date", "close", "stock_return_pct", "benchmark_return_pct", "relative_return_pct"},
+		"properties": map[string]any{
+			"trade_date":           map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
+			"close":                map[string]any{"type": "string", "example": "3401.76"},
+			"stock_return_pct":     map[string]any{"type": "string", "example": "8.72"},
+			"benchmark_return_pct": map[string]any{"type": "string", "example": "4.10"},
+			"relative_return_pct":  map[string]any{"type": "string", "example": "4.62"},
 		},
 	}
 }
@@ -461,7 +604,7 @@ func demoStatusSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
 			},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v5"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v6"},
 			"as_of":        map[string]any{"type": "string", "format": "date", "nullable": true, "example": "2024-06-28"},
 			"counts":       map[string]any{"$ref": "#/components/schemas/DemoCounts"},
 			"sample_stocks": map[string]any{
@@ -541,7 +684,7 @@ func marketDataSourceSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
 			},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v5"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v6"},
 		},
 	}
 }

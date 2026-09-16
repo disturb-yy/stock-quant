@@ -103,7 +103,12 @@ func run(ctx context.Context) error {
 		applicationLogger.Error("initialize stock overview service", "error", err)
 		return err
 	}
-	server := newHTTPServerWithMarketSignalsAndRankingsAndStocks(applicationLogger, httpAddress, overviewService, sectorService, signalService, rankingService, stockService, statusReader)
+	barsService, err := market.NewBarsService(overviewReader, providerSelection)
+	if err != nil {
+		applicationLogger.Error("initialize stock bars service", "error", err)
+		return err
+	}
+	server := newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBars(applicationLogger, httpAddress, overviewService, sectorService, signalService, rankingService, stockService, barsService, statusReader)
 	applicationLogger.Info("HTTP server starting", "address", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		applicationLogger.Error("HTTP server stopped", "error", err)

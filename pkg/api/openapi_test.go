@@ -34,7 +34,7 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if document.Info.Version != "v1" {
 		t.Fatalf("info.version = %q, want %q", document.Info.Version, "v1")
 	}
-	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/stocks/{symbol}", "/api/v1/openapi.json"} {
+	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/stocks/{symbol}", "/api/v1/stocks/{symbol}/bars", "/api/v1/openapi.json"} {
 		if _, ok := document.Paths[path]; !ok {
 			t.Fatalf("OpenAPI paths missing %q", path)
 		}
@@ -42,10 +42,67 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if _, ok := document.Paths["/api/v1/dev/demo-status"]; !ok {
 		t.Fatal("OpenAPI paths missing development demo status")
 	}
-	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult", "MarketRankings", "MarketRanking", "StockOverview", "StockQuote", "StockMetrics", "StockMetric", "StockSparkline", "StockSparklinePoint"} {
+	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult", "MarketRankings", "MarketRanking", "StockOverview", "StockQuote", "StockMetrics", "StockMetric", "StockSparkline", "StockSparklinePoint", "StockBars", "StockBar", "StockEffectiveRange", "StockBenchmark", "StockBenchmarkPoint"} {
 		if _, ok := document.Components.Schemas[schema]; !ok {
 			t.Fatalf("OpenAPI schemas missing %q", schema)
 		}
+	}
+}
+
+func TestOpenAPIStockBarsContract(t *testing.T) {
+	document := OpenAPIDocument()
+	paths := document["paths"].(map[string]any)
+	get := paths["/api/v1/stocks/{symbol}/bars"].(map[string]any)["get"].(map[string]any)
+	if get["operationId"] != "getStockBars" {
+		t.Fatalf("stock bars operation = %#v, want getStockBars", get["operationId"])
+	}
+	parameters := get["parameters"].([]any)
+	if len(parameters) != 7 {
+		t.Fatalf("stock bars parameter count = %d, want 7", len(parameters))
+	}
+	assertParameterEnum := func(index int, name string, values []string) {
+		t.Helper()
+		parameter := parameters[index].(map[string]any)
+		if parameter["name"] != name {
+			t.Fatalf("parameter[%d] name = %#v, want %q", index, parameter["name"], name)
+		}
+		got := parameter["schema"].(map[string]any)["enum"].([]string)
+		if len(got) != len(values) {
+			t.Fatalf("parameter %q enum = %#v, want %#v", name, got, values)
+		}
+		for valueIndex := range values {
+			if got[valueIndex] != values[valueIndex] {
+				t.Fatalf("parameter %q enum = %#v, want %#v", name, got, values)
+			}
+		}
+	}
+	assertParameterEnum(1, "timeframe", []string{"1d"})
+	assertParameterEnum(2, "adjust", []string{"none", "qfq", "hfq"})
+	assertParameterEnum(3, "range", []string{"20d", "60d", "120d", "all"})
+	assertParameterEnum(6, "benchmark", []string{"000300.SH"})
+
+	responses := get["responses"].(map[string]any)
+	for _, status := range []string{"200", "400", "404", "405", "503"} {
+		if _, ok := responses[status]; !ok {
+			t.Fatalf("stock bars responses missing %s", status)
+		}
+	}
+	responseSchema := responses["200"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)
+	if responseSchema["$ref"] != "#/components/schemas/StockBars" {
+		t.Fatalf("stock bars response schema = %#v, want StockBars", responseSchema)
+	}
+	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
+	stockBar := schemas["StockBar"].(map[string]any)["properties"].(map[string]any)
+	if stockBar["ma5"].(map[string]any)["nullable"] != true || stockBar["ma20"].(map[string]any)["nullable"] != true {
+		t.Fatal("StockBar MA fields must be nullable")
+	}
+	stockBars := schemas["StockBars"].(map[string]any)["properties"].(map[string]any)
+	if stockBars["benchmark"].(map[string]any)["nullable"] != true {
+		t.Fatal("StockBars.benchmark must be nullable")
+	}
+	rangeSchema := schemas["StockEffectiveRange"].(map[string]any)["properties"].(map[string]any)
+	if rangeSchema["from"].(map[string]any)["nullable"] != true || rangeSchema["to"].(map[string]any)["nullable"] != true {
+		t.Fatal("StockEffectiveRange dates must be nullable")
 	}
 }
 

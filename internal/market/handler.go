@@ -15,7 +15,36 @@ const (
 	sectorsPath  = "/markets/sectors"
 	signalsPath  = "/markets/signals"
 	rankingsPath = "/markets/rankings"
+	barsPath     = "/stocks/:symbol/bars"
 )
+
+// RegisterBarsRoutes 注册股票研究型日线 HTTP 路由。
+func RegisterBarsRoutes(router *gin.RouterGroup, query interface {
+	Bars(context.Context, BarsRequest) (StockBars, error)
+}) {
+	if query == nil {
+		return
+	}
+	router.GET(barsPath, func(context *gin.Context) {
+		request, err := barsRequestFromQuery(context)
+		if err != nil {
+			writeBarsError(context, err)
+			return
+		}
+		request.Symbol = context.Param("symbol")
+		request, err = normalizeBarsRequest(request)
+		if err != nil {
+			writeBarsError(context, err)
+			return
+		}
+		result, err := query.Bars(context.Request.Context(), request)
+		if err != nil {
+			writeBarsError(context, err)
+			return
+		}
+		context.JSON(http.StatusOK, result)
+	})
+}
 
 // RegisterRoutes 注册市场概览 HTTP 路由。
 func RegisterRoutes(router *gin.RouterGroup, reader interface {
@@ -178,4 +207,47 @@ func writeSignalError(context *gin.Context, err error) {
 		return
 	}
 	context.AbortWithStatusJSON(http.StatusServiceUnavailable, api.NewErrorResponse(api.CodeDependencyUnavailable, "市场信号数据暂不可用", nil))
+}
+
+func barsRequestFromQuery(context *gin.Context) (BarsRequest, error) {
+	values := context.Request.URL.Query()
+	request := BarsRequest{}
+	for _, field := range []struct {
+		name   string
+		target *string
+	}{
+		{name: "timeframe", target: &request.Timeframe},
+		{name: "adjust", target: &request.Adjust},
+		{name: "range", target: &request.Range},
+		{name: "from", target: &request.From},
+		{name: "to", target: &request.To},
+		{name: "benchmark", target: &request.Benchmark},
+	} {
+		queryValues, ok := values[field.name]
+		if !ok {
+			continue
+		}
+		if len(queryValues) != 1 || strings.TrimSpace(queryValues[0]) == "" {
+			return BarsRequest{}, newBarsValidationError(field.name, "必须提供且只能提供一次")
+		}
+		*field.target = queryValues[0]
+	}
+	return request, nil
+}
+
+func writeBarsError(context *gin.Context, err error) {
+	var validationError *BarsValidationError
+	if errors.As(err, &validationError) {
+		context.AbortWithStatusJSON(http.StatusBadRequest, api.NewErrorResponse(api.CodeValidation, "股票行情参数无效", validationError.Details()))
+		return
+	}
+	if errors.Is(err, ErrBarsInstrumentNotFound) {
+		context.AbortWithStatusJSON(http.StatusNotFound, api.NewErrorResponse(api.CodeNotFound, "股票不存在", nil))
+		return
+	}
+	context.AbortWithStatusJSON(http.StatusServiceUnavailable, api.NewErrorResponse(api.CodeDependencyUnavailable, "股票行情数据暂不可用", nil))
+}
+
+func newBarsValidationError(field, message string) *BarsValidationError {
+	return &BarsValidationError{Fields: map[string]string{field: message}}
 }

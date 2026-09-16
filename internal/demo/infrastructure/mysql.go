@@ -21,6 +21,7 @@ const (
 	marketOverviewMigration = "0002_market_overview"
 	marketSectorsMigration  = "0003_market_sectors"
 	stockOverviewMigration  = "0004_stock_overview"
+	stockBarsMigration      = "0005_stock_bars"
 )
 
 const createSchemaMigrationsSQL = `
@@ -129,6 +130,19 @@ CREATE TABLE IF NOT EXISTS daily_basic (
     CONSTRAINT fk_daily_basic_instrument FOREIGN KEY (instrument_code) REFERENCES instruments (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
 
+const createStockBarsSQL = `
+CREATE TABLE IF NOT EXISTS daily_adjustment_factors (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    instrument_code VARCHAR(32) NOT NULL,
+    trade_date DATE NOT NULL,
+    qfq_factor DECIMAL(20,8) NOT NULL,
+    hfq_factor DECIMAL(20,8) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_daily_adjustment_factors_instrument_date (instrument_code, trade_date),
+    CONSTRAINT fk_daily_adjustment_factors_instrument FOREIGN KEY (instrument_code) REFERENCES instruments (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+
 // Open 连接并探测 MySQL；密码只进入 Driver DSN，不写入错误信息。
 func Open(ctx context.Context, settings config.Database) (*sql.DB, error) {
 	if ctx == nil {
@@ -185,6 +199,7 @@ func (store *Store) Migrate(ctx context.Context) error {
 		marketOverviewSchemaMigration{db: store.db},
 		marketSectorsSchemaMigration{db: store.db},
 		stockOverviewSchemaMigration{db: store.db},
+		stockBarsSchemaMigration{db: store.db},
 	)
 	if err != nil {
 		return fmt.Errorf("create demo migration runner: %w", err)
@@ -208,6 +223,10 @@ type marketSectorsSchemaMigration struct {
 }
 
 type stockOverviewSchemaMigration struct {
+	db *sql.DB
+}
+
+type stockBarsSchemaMigration struct {
 	db *sql.DB
 }
 
@@ -283,6 +302,27 @@ func (migration stockOverviewSchemaMigration) Up(ctx context.Context) error {
 	return nil
 }
 
+func (migration stockBarsSchemaMigration) Name() string {
+	return stockBarsMigration
+}
+
+func (migration stockBarsSchemaMigration) Up(ctx context.Context) error {
+	var applied int
+	if err := migration.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, stockBarsMigration).Scan(&applied); err != nil {
+		return fmt.Errorf("check migration %q: %w", stockBarsMigration, err)
+	}
+	if applied > 0 {
+		return nil
+	}
+	if _, err := migration.db.ExecContext(ctx, createStockBarsSQL); err != nil {
+		return fmt.Errorf("create stock bars adjustment factors: %w", err)
+	}
+	if _, err := migration.db.ExecContext(ctx, `INSERT INTO schema_migrations (name) VALUES (?)`, stockBarsMigration); err != nil {
+		return fmt.Errorf("record migration %q: %w", stockBarsMigration, err)
+	}
+	return nil
+}
+
 func (migration schemaMigration) Name() string {
 	return migrationName
 }
@@ -352,6 +392,9 @@ func (store *Store) SeedDemo(ctx context.Context, fixture demo.Fixture) error {
 		return err
 	}
 	if err := seedDailyBars(ctx, tx, fixture); err != nil {
+		return err
+	}
+	if err := seedAdjustmentFactors(ctx, tx, fixture); err != nil {
 		return err
 	}
 	if err := seedDailyBasics(ctx, tx, fixture); err != nil {
@@ -424,6 +467,20 @@ func seedDailyBars(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) error 
 			bar.InstrumentCode, bar.TradeDate, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.TurnoverAmount)
 		if err != nil {
 			return fmt.Errorf("upsert daily bar %q/%q: %w", bar.InstrumentCode, bar.TradeDate, err)
+		}
+	}
+	return nil
+}
+
+func seedAdjustmentFactors(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) error {
+	for _, factor := range fixture.AdjustmentFactors {
+		_, err := tx.ExecContext(ctx, `
+            INSERT INTO daily_adjustment_factors (instrument_code, trade_date, qfq_factor, hfq_factor)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE qfq_factor = VALUES(qfq_factor), hfq_factor = VALUES(hfq_factor)`,
+			factor.InstrumentCode, factor.TradeDate, factor.QFQFactor, factor.HFQFactor)
+		if err != nil {
+			return fmt.Errorf("upsert adjustment factor %q/%q: %w", factor.InstrumentCode, factor.TradeDate, err)
 		}
 	}
 	return nil

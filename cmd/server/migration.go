@@ -18,6 +18,6 @@ func initializeMigrations(ctx context.Context, store migrationStore, application
 		return fmt.Errorf("run database migrations: %w", err)
 	}
 
-	applicationLogger.Info("database migration runner initialized", "migration_count", 4)
+	applicationLogger.Info("database migration runner initialized", "migration_count", 5)
 	return nil
 }
