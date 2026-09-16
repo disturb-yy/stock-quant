@@ -87,6 +87,24 @@ func newRouterWithMarketSignalsAndRankingsAndStocksAndBars(applicationLogger *sl
 }, barsReader interface {
 	Bars(context.Context, market.BarsRequest) (market.StockBars, error)
 }, statusReaders ...demo.StatusReader) *gin.Engine {
+	return newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancials(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, nil, statusReaders...)
+}
+
+func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancials(applicationLogger *slog.Logger, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
+}, signalReader interface {
+	Scan(context.Context, market.SignalRequest) (market.MarketSignals, error)
+}, rankingReader interface {
+	Rank(context.Context, market.RankingRequest) (market.MarketRankings, error)
+}, stockOverviewReader interface {
+	Overview(context.Context, string) (stock.StockOverview, error)
+}, barsReader interface {
+	Bars(context.Context, market.BarsRequest) (market.StockBars, error)
+}, financialsReader interface {
+	Financials(context.Context, stock.FinancialsRequest) (stock.StockFinancials, error)
+}, statusReaders ...demo.StatusReader) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(logger.GinMiddleware(applicationLogger), gin.CustomRecovery(apiV1RecoveryHandler))
@@ -103,6 +121,7 @@ func newRouterWithMarketSignalsAndRankingsAndStocksAndBars(applicationLogger *sl
 	market.RegisterRankingRoutes(apiV1, rankingReader)
 	stock.RegisterOverviewRoutes(apiV1, stockOverviewReader)
 	market.RegisterBarsRoutes(apiV1, barsReader)
+	stock.RegisterFinancialsRoutes(apiV1, financialsReader)
 	if len(statusReaders) > 0 {
 		demo.RegisterRoutes(apiV1, statusReaders[0])
 	}
@@ -185,9 +204,27 @@ func newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBars(applicationLogger
 }, barsReader interface {
 	Bars(context.Context, market.BarsRequest) (market.StockBars, error)
 }, statusReaders ...demo.StatusReader) *http.Server {
+	return newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancials(applicationLogger, address, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, nil, statusReaders...)
+}
+
+func newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancials(applicationLogger *slog.Logger, address string, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
+}, signalReader interface {
+	Scan(context.Context, market.SignalRequest) (market.MarketSignals, error)
+}, rankingReader interface {
+	Rank(context.Context, market.RankingRequest) (market.MarketRankings, error)
+}, stockOverviewReader interface {
+	Overview(context.Context, string) (stock.StockOverview, error)
+}, barsReader interface {
+	Bars(context.Context, market.BarsRequest) (market.StockBars, error)
+}, financialsReader interface {
+	Financials(context.Context, stock.FinancialsRequest) (stock.StockFinancials, error)
+}, statusReaders ...demo.StatusReader) *http.Server {
 	return &http.Server{
 		Addr:    address,
-		Handler: newRouterWithMarketSignalsAndRankingsAndStocksAndBars(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, statusReaders...),
+		Handler: newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancials(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, statusReaders...),
 	}
 }
 

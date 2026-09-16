@@ -51,6 +51,7 @@ func run(ctx context.Context) error {
 		"daily_bars":        snapshot.Counts.DailyBars,
 		"daily_basics":      snapshot.Counts.DailyBasics,
 		"financial_metrics": snapshot.Counts.FinancialMetrics,
+		"financial_reports": snapshot.Counts.FinancialReports,
 		"index_snapshots":   snapshot.Counts.IndexSnapshots,
 	})
 }

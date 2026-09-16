@@ -25,14 +25,15 @@ func apiInfo() map[string]any {
 
 func apiPaths(includeDevelopment bool) map[string]any {
 	paths := map[string]any{
-		"/api/v1/health":               healthPath(),
-		"/api/v1/markets/overview":     marketOverviewPath(),
-		"/api/v1/markets/sectors":      marketSectorsPath(),
-		"/api/v1/markets/signals":      marketSignalsPath(),
-		"/api/v1/markets/rankings":     marketRankingsPath(),
-		"/api/v1/stocks/{symbol}":      stockOverviewPath(),
-		"/api/v1/stocks/{symbol}/bars": stockBarsPath(),
-		"/api/v1/openapi.json":         openAPIPath(),
+		"/api/v1/health":                     healthPath(),
+		"/api/v1/markets/overview":           marketOverviewPath(),
+		"/api/v1/markets/sectors":            marketSectorsPath(),
+		"/api/v1/markets/signals":            marketSignalsPath(),
+		"/api/v1/markets/rankings":           marketRankingsPath(),
+		"/api/v1/stocks/{symbol}":            stockOverviewPath(),
+		"/api/v1/stocks/{symbol}/bars":       stockBarsPath(),
+		"/api/v1/stocks/{symbol}/financials": stockFinancialsPath(),
+		"/api/v1/openapi.json":               openAPIPath(),
 	}
 	if includeDevelopment {
 		paths["/api/v1/dev/demo-status"] = demoStatusPath()
@@ -257,6 +258,57 @@ func stockBarsPath() map[string]any {
 	}
 }
 
+func stockFinancialsPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "getStockFinancials",
+			"summary":     "读取股票财务摘要、趋势与简化报表",
+			"parameters": []any{
+				map[string]any{
+					"name": "symbol", "in": "path", "required": true,
+					"description": "直接使用 Markets API 返回的 code，不做前端转换。",
+					"schema":      map[string]any{"type": "string", "pattern": "^[A-Za-z0-9]{1,16}\\.[A-Za-z]{2,8}$", "example": "000001.SZ"},
+				},
+				map[string]any{
+					"name": "period", "in": "query", "required": false,
+					"schema": map[string]any{"type": "string", "enum": []string{"annual", "quarterly"}, "default": "annual"},
+				},
+				map[string]any{
+					"name": "range", "in": "query", "required": false,
+					"description": "年度最多返回 3/5 个财年；季度返回所选年数内最多 12/20 个报告期。",
+					"schema":      map[string]any{"type": "string", "enum": []string{"3y", "5y"}, "default": "5y"},
+				},
+			},
+			"responses": map[string]any{
+				"200": stockFinancialsResponse(),
+				"400": errorResponse("股票财务参数无效"),
+				"404": errorResponse("股票不存在"),
+				"405": errorResponse("请求方法不被允许"),
+				"503": errorResponse("股票财务数据暂不可用"),
+			},
+		},
+	}
+}
+
+func stockFinancialsResponse() map[string]any {
+	return map[string]any{
+		"description": "股票财务摘要、趋势与简化报表",
+		"content": map[string]any{
+			"application/json": map[string]any{
+				"schema": map[string]any{"$ref": "#/components/schemas/StockFinancials"},
+				"example": map[string]any{
+					"symbol": "000001.SZ", "name": "平安银行", "period": "annual", "requested_range": "5y",
+					"effective_range":    map[string]any{"from": "2019-12-31", "to": "2023-12-31"},
+					"reporting_currency": "CNY", "amount_unit": "CNY", "latest_report_date": "2023-12-31",
+					"summary": map[string]any{"period_end": "2023-12-31", "published_at": "2024-04-30", "revenue": "1600.00", "revenue_yoy_pct": "11.11", "net_profit": "272.00", "net_profit_yoy_pct": "14.48", "gross_margin_pct": "41.00", "roe_pct": "23.78", "operating_cash_flow": "345.00", "free_cash_flow": "240.00", "debt_to_asset_pct": "45.00", "current_ratio": "2.53"},
+					"reports": []map[string]any{{"period_end": "2023-12-31", "fiscal_year": 2023, "fiscal_quarter": nil, "published_at": "2024-04-30", "income": map[string]any{"revenue": "1600.00", "gross_profit": "656.00", "operating_profit": "421.60", "net_profit": "272.00"}, "balance": map[string]any{"cash_and_equivalents": "283.50", "accounts_receivable": "202.50", "inventory": "243.00", "current_assets": "810.00", "current_liabilities": "320.00", "total_assets": "2080.00", "total_liabilities": "936.00", "total_equity": "1144.00"}, "cash_flow": map[string]any{"operating_cash_flow": "345.00", "capital_expenditure": "105.00", "investing_cash_flow": "-75.90", "financing_cash_flow": "-34.50", "net_cash_change": "234.60"}, "indicators": map[string]any{"revenue_yoy_pct": "11.11", "net_profit_yoy_pct": "14.48", "gross_margin_pct": "41.00", "roe_pct": "23.78", "free_cash_flow": "240.00", "debt_to_asset_pct": "45.00", "current_ratio": "2.53"}}},
+					"source":  map[string]any{"mode": "demo", "provider": "mysql-demo-fixture", "seed_version": "fnd-003-demo-v7", "as_of": "2024-06-28"},
+				},
+			},
+		},
+	}
+}
+
 func stockBarsResponse() map[string]any {
 	return map[string]any{
 		"description": "股票研究型日线",
@@ -268,7 +320,7 @@ func stockBarsResponse() map[string]any {
 					"effective_range": map[string]any{"from": "2024-06-27", "to": "2024-06-28"},
 					"bars":            []map[string]any{{"trade_date": "2024-06-27", "open": "10.12", "high": "10.28", "low": "10.05", "close": "10.22", "volume": int64(78210000), "ma5": nil, "ma20": nil}},
 					"benchmark":       nil,
-					"source":          map[string]any{"mode": "demo", "provider": "mysql-demo-fixture", "seed_version": "fnd-003-demo-v6"},
+					"source":          map[string]any{"mode": "demo", "provider": "mysql-demo-fixture", "seed_version": "fnd-003-demo-v7"},
 				},
 			},
 		},
@@ -289,39 +341,47 @@ func jsonReferenceResponse(description, reference string) map[string]any {
 func apiComponents() map[string]any {
 	return map[string]any{
 		"schemas": map[string]any{
-			"Response":            responseSchema(),
-			"ErrorResponse":       errorSchema(),
-			"PaginationRequest":   paginationRequestSchema(),
-			"PaginationMeta":      paginationMetaSchema(),
-			"PaginatedResponse":   paginatedResponseSchema(),
-			"HealthResponse":      healthSchema(),
-			"DemoCounts":          demoCountsSchema(),
-			"DemoSampleStock":     demoSampleStockSchema(),
-			"DemoStatus":          demoStatusSchema(),
-			"MarketOverview":      marketOverviewSchema(),
-			"MarketSectors":       marketSectorsSchema(),
-			"MarketSector":        marketSectorSchema(),
-			"SectorLeader":        sectorLeaderSchema(),
-			"MarketDataSource":    marketDataSourceSchema(),
-			"MarketIndex":         marketIndexSchema(),
-			"MarketBreadth":       marketBreadthSchema(),
-			"MarketTurnover":      marketTurnoverSchema(),
-			"MarketSignals":       marketSignalsSchema(),
-			"SignalParameters":    signalParametersSchema(),
-			"SignalResult":        signalResultSchema(),
-			"MarketRankings":      marketRankingsSchema(),
-			"MarketRanking":       marketRankingSchema(),
-			"StockOverview":       stockOverviewSchema(),
-			"StockQuote":          stockQuoteSchema(),
-			"StockMetrics":        stockMetricsSchema(),
-			"StockMetric":         stockMetricSchema(),
-			"StockSparkline":      stockSparklineSchema(),
-			"StockSparklinePoint": stockSparklinePointSchema(),
-			"StockBars":           stockBarsSchema(),
-			"StockBar":            stockBarSchema(),
-			"StockEffectiveRange": stockEffectiveRangeSchema(),
-			"StockBenchmark":      stockBenchmarkSchema(),
-			"StockBenchmarkPoint": stockBenchmarkPointSchema(),
+			"Response":                 responseSchema(),
+			"ErrorResponse":            errorSchema(),
+			"PaginationRequest":        paginationRequestSchema(),
+			"PaginationMeta":           paginationMetaSchema(),
+			"PaginatedResponse":        paginatedResponseSchema(),
+			"HealthResponse":           healthSchema(),
+			"DemoCounts":               demoCountsSchema(),
+			"DemoSampleStock":          demoSampleStockSchema(),
+			"DemoStatus":               demoStatusSchema(),
+			"MarketOverview":           marketOverviewSchema(),
+			"MarketSectors":            marketSectorsSchema(),
+			"MarketSector":             marketSectorSchema(),
+			"SectorLeader":             sectorLeaderSchema(),
+			"MarketDataSource":         marketDataSourceSchema(),
+			"MarketIndex":              marketIndexSchema(),
+			"MarketBreadth":            marketBreadthSchema(),
+			"MarketTurnover":           marketTurnoverSchema(),
+			"MarketSignals":            marketSignalsSchema(),
+			"SignalParameters":         signalParametersSchema(),
+			"SignalResult":             signalResultSchema(),
+			"MarketRankings":           marketRankingsSchema(),
+			"MarketRanking":            marketRankingSchema(),
+			"StockOverview":            stockOverviewSchema(),
+			"StockQuote":               stockQuoteSchema(),
+			"StockMetrics":             stockMetricsSchema(),
+			"StockMetric":              stockMetricSchema(),
+			"StockSparkline":           stockSparklineSchema(),
+			"StockSparklinePoint":      stockSparklinePointSchema(),
+			"StockBars":                stockBarsSchema(),
+			"StockBar":                 stockBarSchema(),
+			"StockEffectiveRange":      stockEffectiveRangeSchema(),
+			"StockBenchmark":           stockBenchmarkSchema(),
+			"StockBenchmarkPoint":      stockBenchmarkPointSchema(),
+			"StockFinancials":          stockFinancialsSchema(),
+			"StockFinancialSummary":    stockFinancialSummarySchema(),
+			"StockFinancialReport":     stockFinancialReportSchema(),
+			"StockFinancialIncome":     stockFinancialIncomeSchema(),
+			"StockFinancialBalance":    stockFinancialBalanceSchema(),
+			"StockFinancialCashFlow":   stockFinancialCashFlowSchema(),
+			"StockFinancialIndicators": stockFinancialIndicatorsSchema(),
+			"StockFinancialSource":     stockFinancialSourceSchema(),
 		},
 	}
 }
@@ -475,6 +535,149 @@ func stockBenchmarkPointSchema() map[string]any {
 	}
 }
 
+func stockFinancialsSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"symbol", "name", "period", "requested_range", "effective_range", "reporting_currency", "amount_unit", "latest_report_date", "summary", "reports", "source"},
+		"properties": map[string]any{
+			"symbol":             map[string]any{"type": "string", "example": "000001.SZ"},
+			"name":               map[string]any{"type": "string", "example": "平安银行"},
+			"period":             map[string]any{"type": "string", "enum": []string{"annual", "quarterly"}},
+			"requested_range":    map[string]any{"type": "string", "enum": []string{"3y", "5y"}},
+			"effective_range":    map[string]any{"$ref": "#/components/schemas/StockEffectiveRange"},
+			"reporting_currency": map[string]any{"type": "string", "enum": []string{"CNY"}},
+			"amount_unit":        map[string]any{"type": "string", "enum": []string{"CNY"}, "description": "金额字段的统一单位。"},
+			"latest_report_date": map[string]any{"type": "string", "format": "date", "nullable": true},
+			"summary":            map[string]any{"$ref": "#/components/schemas/StockFinancialSummary", "nullable": true},
+			"reports":            map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/StockFinancialReport"}},
+			"source":             map[string]any{"$ref": "#/components/schemas/StockFinancialSource"},
+		},
+	}
+}
+
+func stockFinancialSummarySchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"period_end", "published_at", "revenue", "revenue_yoy_pct", "net_profit", "net_profit_yoy_pct", "gross_margin_pct", "roe_pct", "operating_cash_flow", "free_cash_flow", "debt_to_asset_pct", "current_ratio"},
+		"properties": map[string]any{
+			"period_end":          map[string]any{"type": "string", "format": "date"},
+			"published_at":        map[string]any{"type": "string", "format": "date", "nullable": true},
+			"revenue":             financialNullableAmount("收入金额，单位为 CNY。"),
+			"revenue_yoy_pct":     financialNullablePercent("仅与同口径上一财年或上年同期比较。"),
+			"net_profit":          financialNullableAmount("归母净利润金额，单位为 CNY。"),
+			"net_profit_yoy_pct":  financialNullablePercent("仅与同口径上一财年或上年同期比较。"),
+			"gross_margin_pct":    financialNullablePercent("毛利率百分比。"),
+			"roe_pct":             financialNullablePercent("ROE 百分比，按归母净利润除以期末归属权益。"),
+			"operating_cash_flow": financialNullableAmount("经营现金流金额，单位为 CNY。"),
+			"free_cash_flow":      financialNullableAmount("自由现金流金额，口径为经营现金流减资本开支。"),
+			"debt_to_asset_pct":   financialNullablePercent("资产负债率百分比。"),
+			"current_ratio":       financialNullableRatio("流动比率倍数。"),
+		},
+	}
+}
+
+func stockFinancialReportSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"period_end", "fiscal_year", "fiscal_quarter", "published_at", "income", "balance", "cash_flow", "indicators"},
+		"properties": map[string]any{
+			"period_end":     map[string]any{"type": "string", "format": "date"},
+			"fiscal_year":    map[string]any{"type": "integer", "minimum": 1},
+			"fiscal_quarter": map[string]any{"type": "string", "enum": []string{"Q1", "Q2", "Q3", "Q4"}, "nullable": true},
+			"published_at":   map[string]any{"type": "string", "format": "date", "nullable": true},
+			"income":         map[string]any{"$ref": "#/components/schemas/StockFinancialIncome"},
+			"balance":        map[string]any{"$ref": "#/components/schemas/StockFinancialBalance"},
+			"cash_flow":      map[string]any{"$ref": "#/components/schemas/StockFinancialCashFlow"},
+			"indicators":     map[string]any{"$ref": "#/components/schemas/StockFinancialIndicators"},
+		},
+	}
+}
+
+func stockFinancialIncomeSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"revenue", "gross_profit", "operating_profit", "net_profit"},
+		"properties": map[string]any{
+			"revenue":          financialNullableAmount("营业收入金额，单位为 CNY。"),
+			"gross_profit":     financialNullableAmount("毛利润金额，单位为 CNY。"),
+			"operating_profit": financialNullableAmount("营业利润金额，单位为 CNY。"),
+			"net_profit":       financialNullableAmount("归母净利润金额，单位为 CNY。"),
+		},
+	}
+}
+
+func stockFinancialBalanceSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"cash_and_equivalents", "accounts_receivable", "inventory", "current_assets", "current_liabilities", "total_assets", "total_liabilities", "total_equity"},
+		"properties": map[string]any{
+			"cash_and_equivalents": financialNullableAmount("现金及现金等价物金额，单位为 CNY。"),
+			"accounts_receivable":  financialNullableAmount("应收账款金额，单位为 CNY。"),
+			"inventory":            financialNullableAmount("存货金额，单位为 CNY。"),
+			"current_assets":       financialNullableAmount("流动资产金额，单位为 CNY。"),
+			"current_liabilities":  financialNullableAmount("流动负债金额，单位为 CNY。"),
+			"total_assets":         financialNullableAmount("资产总额，单位为 CNY。"),
+			"total_liabilities":    financialNullableAmount("负债总额，单位为 CNY。"),
+			"total_equity":         financialNullableAmount("权益总额，单位为 CNY。"),
+		},
+	}
+}
+
+func stockFinancialCashFlowSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"operating_cash_flow", "capital_expenditure", "investing_cash_flow", "financing_cash_flow", "net_cash_change"},
+		"properties": map[string]any{
+			"operating_cash_flow": financialNullableAmount("经营现金流金额，单位为 CNY。"),
+			"capital_expenditure": financialNullableAmount("资本开支现金流出额的非负绝对值，单位为 CNY。"),
+			"investing_cash_flow": financialNullableAmount("投资现金流金额，单位为 CNY。"),
+			"financing_cash_flow": financialNullableAmount("筹资现金流金额，单位为 CNY。"),
+			"net_cash_change":     financialNullableAmount("现金净增加额，单位为 CNY。"),
+		},
+	}
+}
+
+func stockFinancialIndicatorsSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"revenue_yoy_pct", "net_profit_yoy_pct", "gross_margin_pct", "roe_pct", "free_cash_flow", "debt_to_asset_pct", "current_ratio"},
+		"properties": map[string]any{
+			"revenue_yoy_pct":    financialNullablePercent("收入同比百分比，仅比较同口径期间。"),
+			"net_profit_yoy_pct": financialNullablePercent("净利润同比百分比，仅比较同口径期间。"),
+			"gross_margin_pct":   financialNullablePercent("毛利率百分比。"),
+			"roe_pct":            financialNullablePercent("ROE 百分比，按归母净利润除以期末归属权益。"),
+			"free_cash_flow":     financialNullableAmount("自由现金流金额，口径为经营现金流减资本开支。"),
+			"debt_to_asset_pct":  financialNullablePercent("资产负债率百分比。"),
+			"current_ratio":      financialNullableRatio("流动比率倍数。"),
+		},
+	}
+}
+
+func stockFinancialSourceSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"mode", "provider", "seed_version", "as_of"},
+		"properties": map[string]any{
+			"mode":         map[string]any{"type": "string", "enum": []string{"demo", "real", "fallback"}},
+			"provider":     map[string]any{"type": "string", "enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"}},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v7"},
+			"as_of":        map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
+		},
+	}
+}
+
+func financialNullableAmount(description string) map[string]any {
+	return map[string]any{"type": "string", "nullable": true, "description": description, "example": "1600.00"}
+}
+
+func financialNullablePercent(description string) map[string]any {
+	return map[string]any{"type": "string", "nullable": true, "description": description, "example": "41.00"}
+}
+
+func financialNullableRatio(description string) map[string]any {
+	return map[string]any{"type": "string", "nullable": true, "description": description, "example": "2.53"}
+}
+
 func responseSchema() map[string]any {
 	return map[string]any{
 		"type":     "object",
@@ -567,12 +770,13 @@ func healthSchema() map[string]any {
 func demoCountsSchema() map[string]any {
 	return map[string]any{
 		"type":     "object",
-		"required": []string{"instruments", "daily_bars", "daily_basics", "financial_metrics", "index_snapshots"},
+		"required": []string{"instruments", "daily_bars", "daily_basics", "financial_metrics", "financial_reports", "index_snapshots"},
 		"properties": map[string]any{
 			"instruments":       map[string]any{"type": "integer", "format": "int64", "minimum": 0},
 			"daily_bars":        map[string]any{"type": "integer", "format": "int64", "minimum": 0},
 			"daily_basics":      map[string]any{"type": "integer", "format": "int64", "minimum": 0},
 			"financial_metrics": map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"financial_reports": map[string]any{"type": "integer", "format": "int64", "minimum": 0},
 			"index_snapshots":   map[string]any{"type": "integer", "format": "int64", "minimum": 0},
 		},
 	}
@@ -604,7 +808,7 @@ func demoStatusSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
 			},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v6"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v7"},
 			"as_of":        map[string]any{"type": "string", "format": "date", "nullable": true, "example": "2024-06-28"},
 			"counts":       map[string]any{"$ref": "#/components/schemas/DemoCounts"},
 			"sample_stocks": map[string]any{
@@ -684,7 +888,7 @@ func marketDataSourceSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
 			},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v6"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v7"},
 		},
 	}
 }

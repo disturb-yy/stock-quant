@@ -11,3 +11,4 @@
 ## Current Contents
 
 - `mysql_overview.go`：`GET /api/v1/stocks/{symbol}` 所需的 MySQL 聚合查询实现。
+- `mysql_financials.go`：`GET /api/v1/stocks/{symbol}/financials` 所需的报告期、三张简化报表和来源查询实现。

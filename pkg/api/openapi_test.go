@@ -34,7 +34,7 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if document.Info.Version != "v1" {
 		t.Fatalf("info.version = %q, want %q", document.Info.Version, "v1")
 	}
-	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/stocks/{symbol}", "/api/v1/stocks/{symbol}/bars", "/api/v1/openapi.json"} {
+	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/stocks/{symbol}", "/api/v1/stocks/{symbol}/bars", "/api/v1/stocks/{symbol}/financials", "/api/v1/openapi.json"} {
 		if _, ok := document.Paths[path]; !ok {
 			t.Fatalf("OpenAPI paths missing %q", path)
 		}
@@ -42,9 +42,54 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if _, ok := document.Paths["/api/v1/dev/demo-status"]; !ok {
 		t.Fatal("OpenAPI paths missing development demo status")
 	}
-	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult", "MarketRankings", "MarketRanking", "StockOverview", "StockQuote", "StockMetrics", "StockMetric", "StockSparkline", "StockSparklinePoint", "StockBars", "StockBar", "StockEffectiveRange", "StockBenchmark", "StockBenchmarkPoint"} {
+	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult", "MarketRankings", "MarketRanking", "StockOverview", "StockQuote", "StockMetrics", "StockMetric", "StockSparkline", "StockSparklinePoint", "StockBars", "StockBar", "StockEffectiveRange", "StockBenchmark", "StockBenchmarkPoint", "StockFinancials", "StockFinancialSummary", "StockFinancialReport", "StockFinancialIncome", "StockFinancialBalance", "StockFinancialCashFlow", "StockFinancialIndicators", "StockFinancialSource"} {
 		if _, ok := document.Components.Schemas[schema]; !ok {
 			t.Fatalf("OpenAPI schemas missing %q", schema)
+		}
+	}
+}
+
+func TestOpenAPIStockFinancialsContract(t *testing.T) {
+	document := OpenAPIDocument()
+	paths := document["paths"].(map[string]any)
+	get := paths["/api/v1/stocks/{symbol}/financials"].(map[string]any)["get"].(map[string]any)
+	if get["operationId"] != "getStockFinancials" {
+		t.Fatalf("stock financials operation = %#v, want getStockFinancials", get["operationId"])
+	}
+	parameters := get["parameters"].([]any)
+	if len(parameters) != 3 {
+		t.Fatalf("stock financials parameter count = %d, want 3", len(parameters))
+	}
+	period := parameters[1].(map[string]any)
+	periodSchema := period["schema"].(map[string]any)
+	if period["name"] != "period" || periodSchema["default"] != "annual" || len(periodSchema["enum"].([]string)) != 2 {
+		t.Fatalf("period parameter = %#v, want annual/quarterly defaults", period)
+	}
+	rangeParameter := parameters[2].(map[string]any)
+	rangeSchema := rangeParameter["schema"].(map[string]any)
+	if rangeParameter["name"] != "range" || rangeSchema["default"] != "5y" {
+		t.Fatalf("range parameter = %#v, want 5y default", rangeParameter)
+	}
+	responses := get["responses"].(map[string]any)
+	for _, status := range []string{"200", "400", "404", "405", "503"} {
+		if _, ok := responses[status]; !ok {
+			t.Fatalf("stock financials responses missing %s", status)
+		}
+	}
+	responseSchema := responses["200"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)
+	if responseSchema["$ref"] != "#/components/schemas/StockFinancials" {
+		t.Fatalf("stock financials response schema = %#v, want StockFinancials", responseSchema)
+	}
+	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
+	financials := schemas["StockFinancials"].(map[string]any)
+	properties := financials["properties"].(map[string]any)
+	if properties["summary"].(map[string]any)["nullable"] != true || properties["latest_report_date"].(map[string]any)["nullable"] != true {
+		t.Fatal("StockFinancials summary and latest report date must be nullable")
+	}
+	indicators := schemas["StockFinancialIndicators"].(map[string]any)["properties"].(map[string]any)
+	for _, field := range []string{"revenue_yoy_pct", "gross_margin_pct", "roe_pct", "free_cash_flow", "debt_to_asset_pct", "current_ratio"} {
+		if indicators[field].(map[string]any)["nullable"] != true {
+			t.Fatalf("StockFinancialIndicators.%s must be nullable", field)
 		}
 	}
 }
