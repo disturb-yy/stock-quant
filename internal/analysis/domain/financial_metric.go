@@ -11,6 +11,7 @@ type FinancialMetric struct {
 	InstrumentCode string
 	MetricDate     string
 	MetricName     string
+	Basis          string
 	MetricValue    string
 }
 
@@ -24,6 +25,9 @@ func (metric FinancialMetric) Validate() error {
 	}
 	if strings.TrimSpace(metric.MetricName) == "" {
 		return errors.New("financial metric name is required")
+	}
+	if strings.TrimSpace(metric.Basis) == "" {
+		return errors.New("financial metric basis is required")
 	}
 	if strings.TrimSpace(metric.MetricValue) == "" {
 		return errors.New("financial metric value is required")

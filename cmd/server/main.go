@@ -14,6 +14,8 @@ import (
 	"github.com/disturb-yy/stock-quant/internal/demo/infrastructure"
 	"github.com/disturb-yy/stock-quant/internal/market"
 	marketinfrastructure "github.com/disturb-yy/stock-quant/internal/market/infrastructure"
+	"github.com/disturb-yy/stock-quant/internal/stock"
+	stockinfrastructure "github.com/disturb-yy/stock-quant/internal/stock/infrastructure"
 	"github.com/disturb-yy/stock-quant/pkg/config"
 	"github.com/disturb-yy/stock-quant/pkg/logger"
 )
@@ -91,7 +93,17 @@ func run(ctx context.Context) error {
 		applicationLogger.Error("initialize market ranking service", "error", err)
 		return err
 	}
-	server := newHTTPServerWithMarketSignalsAndRankings(applicationLogger, httpAddress, overviewService, sectorService, signalService, rankingService, statusReader)
+	stockReader, err := stockinfrastructure.NewMySQLOverviewReader(database)
+	if err != nil {
+		applicationLogger.Error("initialize stock overview reader", "error", err)
+		return err
+	}
+	stockService, err := stock.NewOverviewService(stockReader)
+	if err != nil {
+		applicationLogger.Error("initialize stock overview service", "error", err)
+		return err
+	}
+	server := newHTTPServerWithMarketSignalsAndRankingsAndStocks(applicationLogger, httpAddress, overviewService, sectorService, signalService, rankingService, stockService, statusReader)
 	applicationLogger.Info("HTTP server starting", "address", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		applicationLogger.Error("HTTP server stopped", "error", err)

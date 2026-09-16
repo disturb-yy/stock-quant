@@ -19,7 +19,7 @@
 |---|---|
 | `cmd/server` | 服务启动、依赖注入、Composition Root |
 | `build/chart` | Helm 部署包装与运行时配置 |
-| `internal/stock` | 股票基础信息领域 |
+| `internal/stock` | 股票基础信息与股票详情概览领域 |
 | `internal/market` | 行情数据领域 |
 | `internal/analysis` | 股票分析领域 |
 | `internal/auth` | 身份认证与授权领域 |
@@ -110,6 +110,7 @@ internal/auth/
 | 修改股票查询流程 | `internal/stock` |
 | 修改股票 HTTP API | `internal/stock/handler.go` |
 | 修改股票 MySQL 存储 | `internal/stock/infrastructure/repository_mysql.go` |
+| 修改股票详情概览 | `internal/stock/overview.go`、`internal/stock/handler.go`、`internal/stock/infrastructure/mysql_overview.go` |
 | 修改行情模型 | `internal/market/domain` |
 | 修改行情同步流程 | `internal/market` |
 | 修改市场概览查询 | `internal/market/service.go`、`internal/market/handler.go` |

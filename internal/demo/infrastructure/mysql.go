@@ -20,6 +20,7 @@ const (
 	migrationName           = "0001_demo_seed"
 	marketOverviewMigration = "0002_market_overview"
 	marketSectorsMigration  = "0003_market_sectors"
+	stockOverviewMigration  = "0004_stock_overview"
 )
 
 const createSchemaMigrationsSQL = `
@@ -114,6 +115,20 @@ CREATE TABLE IF NOT EXISTS sector_memberships (
     CONSTRAINT fk_sector_memberships_instrument FOREIGN KEY (instrument_code) REFERENCES instruments (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
 
+const createStockOverviewSQL = `
+CREATE TABLE IF NOT EXISTS daily_basic (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    instrument_code VARCHAR(32) NOT NULL,
+    trade_date DATE NOT NULL,
+    market_cap DECIMAL(20,6) NULL,
+    pb DECIMAL(20,6) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_daily_basic_instrument_date (instrument_code, trade_date),
+    INDEX idx_daily_basic_trade_date (trade_date, instrument_code),
+    CONSTRAINT fk_daily_basic_instrument FOREIGN KEY (instrument_code) REFERENCES instruments (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+
 // Open 连接并探测 MySQL；密码只进入 Driver DSN，不写入错误信息。
 func Open(ctx context.Context, settings config.Database) (*sql.DB, error) {
 	if ctx == nil {
@@ -169,6 +184,7 @@ func (store *Store) Migrate(ctx context.Context) error {
 		schemaMigration{db: store.db},
 		marketOverviewSchemaMigration{db: store.db},
 		marketSectorsSchemaMigration{db: store.db},
+		stockOverviewSchemaMigration{db: store.db},
 	)
 	if err != nil {
 		return fmt.Errorf("create demo migration runner: %w", err)
@@ -188,6 +204,10 @@ type marketOverviewSchemaMigration struct {
 }
 
 type marketSectorsSchemaMigration struct {
+	db *sql.DB
+}
+
+type stockOverviewSchemaMigration struct {
 	db *sql.DB
 }
 
@@ -239,6 +259,30 @@ func (migration marketSectorsSchemaMigration) Up(ctx context.Context) error {
 	return nil
 }
 
+func (migration stockOverviewSchemaMigration) Name() string {
+	return stockOverviewMigration
+}
+
+func (migration stockOverviewSchemaMigration) Up(ctx context.Context) error {
+	var applied int
+	if err := migration.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, stockOverviewMigration).Scan(&applied); err != nil {
+		return fmt.Errorf("check migration %q: %w", stockOverviewMigration, err)
+	}
+	if applied > 0 {
+		return nil
+	}
+	if _, err := migration.db.ExecContext(ctx, `ALTER TABLE financial_metrics ADD COLUMN basis VARCHAR(32) NOT NULL DEFAULT 'latest_report' AFTER metric_name`); err != nil {
+		return fmt.Errorf("add financial metric basis: %w", err)
+	}
+	if _, err := migration.db.ExecContext(ctx, createStockOverviewSQL); err != nil {
+		return fmt.Errorf("create daily basic table: %w", err)
+	}
+	if _, err := migration.db.ExecContext(ctx, `INSERT INTO schema_migrations (name) VALUES (?)`, stockOverviewMigration); err != nil {
+		return fmt.Errorf("record migration %q: %w", stockOverviewMigration, err)
+	}
+	return nil
+}
+
 func (migration schemaMigration) Name() string {
 	return migrationName
 }
@@ -283,7 +327,7 @@ func (migration schemaMigration) Up(ctx context.Context) error {
 	return nil
 }
 
-// SeedDemo 幂等写入四类 fixture 和版本元数据。
+// SeedDemo 幂等写入 fixture 各类数据和版本元数据。
 func (store *Store) SeedDemo(ctx context.Context, fixture demo.Fixture) error {
 	if err := fixture.Validate(); err != nil {
 		return fmt.Errorf("validate fixture in MySQL store: %w", err)
@@ -308,6 +352,9 @@ func (store *Store) SeedDemo(ctx context.Context, fixture demo.Fixture) error {
 		return err
 	}
 	if err := seedDailyBars(ctx, tx, fixture); err != nil {
+		return err
+	}
+	if err := seedDailyBasics(ctx, tx, fixture); err != nil {
 		return err
 	}
 	if err := seedIndexSnapshots(ctx, tx, fixture); err != nil {
@@ -382,6 +429,20 @@ func seedDailyBars(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) error 
 	return nil
 }
 
+func seedDailyBasics(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) error {
+	for _, basic := range fixture.DailyBasics {
+		_, err := tx.ExecContext(ctx, `
+            INSERT INTO daily_basic (instrument_code, trade_date, market_cap, pb)
+            VALUES (?, ?, NULLIF(?, ''), NULLIF(?, ''))
+            ON DUPLICATE KEY UPDATE market_cap = VALUES(market_cap), pb = VALUES(pb)`,
+			basic.InstrumentCode, basic.TradeDate, basic.MarketCap, basic.PB)
+		if err != nil {
+			return fmt.Errorf("upsert daily basic %q/%q: %w", basic.InstrumentCode, basic.TradeDate, err)
+		}
+	}
+	return nil
+}
+
 func seedIndexSnapshots(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) error {
 	for _, index := range fixture.IndexSnapshots {
 		observedAt, err := mysqlDateTime(index.ObservedAt)
@@ -411,10 +472,10 @@ func mysqlDateTime(value string) (string, error) {
 func seedFinancialMetrics(ctx context.Context, tx *sql.Tx, fixture demo.Fixture) error {
 	for _, metric := range fixture.FinancialMetrics {
 		_, err := tx.ExecContext(ctx, `
-            INSERT INTO financial_metrics (instrument_code, metric_date, metric_name, metric_value)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE metric_value = VALUES(metric_value)`,
-			metric.InstrumentCode, metric.MetricDate, metric.MetricName, metric.MetricValue)
+            INSERT INTO financial_metrics (instrument_code, metric_date, metric_name, basis, metric_value)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE basis = VALUES(basis), metric_value = VALUES(metric_value)`,
+			metric.InstrumentCode, metric.MetricDate, metric.MetricName, metric.Basis, metric.MetricValue)
 		if err != nil {
 			return fmt.Errorf("upsert financial metric %q/%q: %w", metric.InstrumentCode, metric.MetricName, err)
 		}
@@ -441,6 +502,9 @@ func (store *Store) ReadDemoSnapshot(ctx context.Context) (demo.StoreSnapshot, e
 	}
 	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM daily_bars`).Scan(&snapshot.Counts.DailyBars); err != nil {
 		return demo.StoreSnapshot{}, fmt.Errorf("count daily bars: %w", err)
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM daily_basic`).Scan(&snapshot.Counts.DailyBasics); err != nil {
+		return demo.StoreSnapshot{}, fmt.Errorf("count daily basic: %w", err)
 	}
 	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM financial_metrics`).Scan(&snapshot.Counts.FinancialMetrics); err != nil {
 		return demo.StoreSnapshot{}, fmt.Errorf("count financial metrics: %w", err)

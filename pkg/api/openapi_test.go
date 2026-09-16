@@ -34,7 +34,7 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if document.Info.Version != "v1" {
 		t.Fatalf("info.version = %q, want %q", document.Info.Version, "v1")
 	}
-	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/openapi.json"} {
+	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/stocks/{symbol}", "/api/v1/openapi.json"} {
 		if _, ok := document.Paths[path]; !ok {
 			t.Fatalf("OpenAPI paths missing %q", path)
 		}
@@ -42,9 +42,50 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if _, ok := document.Paths["/api/v1/dev/demo-status"]; !ok {
 		t.Fatal("OpenAPI paths missing development demo status")
 	}
-	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult", "MarketRankings", "MarketRanking"} {
+	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult", "MarketRankings", "MarketRanking", "StockOverview", "StockQuote", "StockMetrics", "StockMetric", "StockSparkline", "StockSparklinePoint"} {
 		if _, ok := document.Components.Schemas[schema]; !ok {
 			t.Fatalf("OpenAPI schemas missing %q", schema)
+		}
+	}
+}
+
+func TestOpenAPIStockOverviewContract(t *testing.T) {
+	document := OpenAPIDocument()
+	paths := document["paths"].(map[string]any)
+	get := paths["/api/v1/stocks/{symbol}"].(map[string]any)["get"].(map[string]any)
+	if get["operationId"] != "getStockOverview" {
+		t.Fatalf("stock overview operation = %#v, want getStockOverview", get["operationId"])
+	}
+	parameters := get["parameters"].([]any)
+	if len(parameters) != 1 || parameters[0].(map[string]any)["name"] != "symbol" || parameters[0].(map[string]any)["in"] != "path" {
+		t.Fatalf("stock overview parameters = %#v, want required path symbol", parameters)
+	}
+	responses := get["responses"].(map[string]any)
+	for _, status := range []string{"200", "400", "404", "405", "503"} {
+		if _, ok := responses[status]; !ok {
+			t.Fatalf("stock overview responses missing %s", status)
+		}
+	}
+	responseSchema := responses["200"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)
+	if responseSchema["$ref"] != "#/components/schemas/StockOverview" {
+		t.Fatalf("stock overview response schema = %#v", responseSchema)
+	}
+	components := document["components"].(map[string]any)["schemas"].(map[string]any)
+	metrics := components["StockMetrics"].(map[string]any)["properties"].(map[string]any)
+	for _, field := range []string{"market_cap", "pe_ttm", "pb", "roe"} {
+		if _, ok := metrics[field]; !ok {
+			t.Fatalf("StockMetrics missing property %q", field)
+		}
+	}
+	metric := components["StockMetric"].(map[string]any)
+	if metric["properties"].(map[string]any)["value"].(map[string]any)["nullable"] != true {
+		t.Fatal("StockMetric.value must be nullable for missing optional metrics")
+	}
+	sparklinePoint := components["StockSparklinePoint"].(map[string]any)
+	properties := sparklinePoint["properties"].(map[string]any)
+	for _, field := range []string{"trade_date", "open", "high", "low", "close"} {
+		if _, ok := properties[field]; !ok {
+			t.Fatalf("StockSparklinePoint missing property %q", field)
 		}
 	}
 }

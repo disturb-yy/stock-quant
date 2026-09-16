@@ -11,6 +11,7 @@
 ## Current Contents
 
 - `domain/daily_bar.go`：Daily Bar 实体和最小领域校验。
+- `domain/daily_basic.go`：daily basic 估值与规模快照及最小领域校验。
 - `domain/index_snapshot.go`：指数快照业务概念和校验。
 - `domain/market_breadth.go`：市场宽度和成交额统计概念。
 - `domain/sector.go`：行业分类、行业成分及等权表现聚合规则。

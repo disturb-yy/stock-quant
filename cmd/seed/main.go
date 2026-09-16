@@ -49,6 +49,7 @@ func run(ctx context.Context) error {
 		"as_of":             snapshot.AsOf,
 		"instruments":       snapshot.Counts.Instruments,
 		"daily_bars":        snapshot.Counts.DailyBars,
+		"daily_basics":      snapshot.Counts.DailyBasics,
 		"financial_metrics": snapshot.Counts.FinancialMetrics,
 		"index_snapshots":   snapshot.Counts.IndexSnapshots,
 	})

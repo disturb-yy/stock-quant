@@ -10,6 +10,7 @@ import (
 	"github.com/disturb-yy/stock-quant/internal/demo"
 	"github.com/disturb-yy/stock-quant/internal/health"
 	"github.com/disturb-yy/stock-quant/internal/market"
+	"github.com/disturb-yy/stock-quant/internal/stock"
 	"github.com/disturb-yy/stock-quant/pkg/api"
 	"github.com/disturb-yy/stock-quant/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -56,6 +57,20 @@ func newRouterWithMarketSignalsAndRankings(applicationLogger *slog.Logger, overv
 }, rankingReader interface {
 	Rank(context.Context, market.RankingRequest) (market.MarketRankings, error)
 }, statusReaders ...demo.StatusReader) *gin.Engine {
+	return newRouterWithMarketSignalsAndRankingsAndStocks(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, nil, statusReaders...)
+}
+
+func newRouterWithMarketSignalsAndRankingsAndStocks(applicationLogger *slog.Logger, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
+}, signalReader interface {
+	Scan(context.Context, market.SignalRequest) (market.MarketSignals, error)
+}, rankingReader interface {
+	Rank(context.Context, market.RankingRequest) (market.MarketRankings, error)
+}, stockOverviewReader interface {
+	Overview(context.Context, string) (stock.StockOverview, error)
+}, statusReaders ...demo.StatusReader) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(logger.GinMiddleware(applicationLogger), gin.CustomRecovery(apiV1RecoveryHandler))
@@ -70,6 +85,7 @@ func newRouterWithMarketSignalsAndRankings(applicationLogger *slog.Logger, overv
 	market.RegisterSectorRoutes(apiV1, sectorReader)
 	market.RegisterSignalRoutes(apiV1, signalReader)
 	market.RegisterRankingRoutes(apiV1, rankingReader)
+	stock.RegisterOverviewRoutes(apiV1, stockOverviewReader)
 	if len(statusReaders) > 0 {
 		demo.RegisterRoutes(apiV1, statusReaders[0])
 	}
@@ -122,9 +138,23 @@ func newHTTPServerWithMarketSignalsAndRankings(applicationLogger *slog.Logger, a
 }, rankingReader interface {
 	Rank(context.Context, market.RankingRequest) (market.MarketRankings, error)
 }, statusReaders ...demo.StatusReader) *http.Server {
+	return newHTTPServerWithMarketSignalsAndRankingsAndStocks(applicationLogger, address, overviewReader, sectorReader, signalReader, rankingReader, nil, statusReaders...)
+}
+
+func newHTTPServerWithMarketSignalsAndRankingsAndStocks(applicationLogger *slog.Logger, address string, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
+}, signalReader interface {
+	Scan(context.Context, market.SignalRequest) (market.MarketSignals, error)
+}, rankingReader interface {
+	Rank(context.Context, market.RankingRequest) (market.MarketRankings, error)
+}, stockOverviewReader interface {
+	Overview(context.Context, string) (stock.StockOverview, error)
+}, statusReaders ...demo.StatusReader) *http.Server {
 	return &http.Server{
 		Addr:    address,
-		Handler: newRouterWithMarketSignalsAndRankings(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, statusReaders...),
+		Handler: newRouterWithMarketSignalsAndRankingsAndStocks(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, statusReaders...),
 	}
 }
 
