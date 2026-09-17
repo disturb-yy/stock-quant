@@ -13,15 +13,20 @@ import (
 
 // MySQLValuationReader 从估值快照和既有行业成员关系读取股票估值研究数据。
 type MySQLValuationReader struct {
-	db *sql.DB
+	db           *sql.DB
+	metadataName string
 }
 
 // NewMySQLValuationReader 创建股票估值 MySQL 读取器。
-func NewMySQLValuationReader(db *sql.DB) (*MySQLValuationReader, error) {
+func NewMySQLValuationReader(db *sql.DB, metadataNames ...string) (*MySQLValuationReader, error) {
 	if db == nil {
 		return nil, errors.New("stock valuation database connection is required")
 	}
-	return &MySQLValuationReader{db: db}, nil
+	metadataName := demo.SeedName
+	if len(metadataNames) > 0 && metadataNames[0] != "" {
+		metadataName = metadataNames[0]
+	}
+	return &MySQLValuationReader{db: db, metadataName: metadataName}, nil
 }
 
 // ReadStockValuation 读取目标股票、行业映射和同日可比成员的完整原始快照。
@@ -61,7 +66,7 @@ func (reader *MySQLValuationReader) readValuationSource(ctx context.Context) (st
 	var seedVersion, asOf string
 	err := reader.db.QueryRowContext(ctx, `
         SELECT seed_version, DATE_FORMAT(as_of, '%Y-%m-%d')
-        FROM demo_seed_metadata WHERE seed_name = ?`, demo.SeedName).Scan(&seedVersion, &asOf)
+        FROM demo_seed_metadata WHERE seed_name = ?`, reader.metadataName).Scan(&seedVersion, &asOf)
 	if err != nil {
 		return "", "", fmt.Errorf("read stock valuation source: %w", err)
 	}

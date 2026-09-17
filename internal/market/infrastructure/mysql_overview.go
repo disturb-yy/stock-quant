@@ -14,15 +14,20 @@ import (
 
 // MySQLOverviewReader 从已迁移的行情表读取市场概览。
 type MySQLOverviewReader struct {
-	db *sql.DB
+	db           *sql.DB
+	metadataName string
 }
 
 // NewMySQLOverviewReader 创建 MySQL 市场概览读取器。
-func NewMySQLOverviewReader(db *sql.DB) (*MySQLOverviewReader, error) {
+func NewMySQLOverviewReader(db *sql.DB, metadataNames ...string) (*MySQLOverviewReader, error) {
 	if db == nil {
 		return nil, errors.New("market overview database connection is required")
 	}
-	return &MySQLOverviewReader{db: db}, nil
+	metadataName := demo.SeedName
+	if len(metadataNames) > 0 && metadataNames[0] != "" {
+		metadataName = metadataNames[0]
+	}
+	return &MySQLOverviewReader{db: db, metadataName: metadataName}, nil
 }
 
 // ReadOverviewSnapshot 读取最新交易日的四个指数和市场宽度。
@@ -109,7 +114,7 @@ func (reader *MySQLOverviewReader) readBreadth(ctx context.Context) (marketdomai
 func (reader *MySQLOverviewReader) readSeedVersion(ctx context.Context) (string, error) {
 	var seedVersion string
 	err := reader.db.QueryRowContext(ctx, `
-        SELECT seed_version FROM demo_seed_metadata WHERE seed_name = ?`, demo.SeedName).Scan(&seedVersion)
+        SELECT seed_version FROM demo_seed_metadata WHERE seed_name = ?`, reader.metadataName).Scan(&seedVersion)
 	if err != nil {
 		return "", fmt.Errorf("read market overview seed metadata: %w", err)
 	}

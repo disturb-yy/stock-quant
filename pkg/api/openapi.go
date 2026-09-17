@@ -34,6 +34,7 @@ func apiPaths(includeDevelopment bool) map[string]any {
 		"/api/v1/stocks/{symbol}/bars":       stockBarsPath(),
 		"/api/v1/stocks/{symbol}/financials": stockFinancialsPath(),
 		"/api/v1/stocks/{symbol}/valuation":  stockValuationPath(),
+		"/api/v1/screeners/run":              screenerRunPath(),
 		"/api/v1/openapi.json":               openAPIPath(),
 	}
 	if includeDevelopment {
@@ -319,6 +320,36 @@ func stockValuationPath() map[string]any {
 	}
 }
 
+func screenerRunPath() map[string]any {
+	return map[string]any{
+		"post": map[string]any{
+			"operationId": "runScreener",
+			"summary":     "执行结构化量化选股",
+			"requestBody": map[string]any{
+				"required": true,
+				"content": map[string]any{
+					"application/json": map[string]any{
+						"schema": map[string]any{"$ref": "#/components/schemas/ScreenerRunRequest"},
+						"example": map[string]any{"spec": map[string]any{
+							"universe_id": "cn_a_share_active",
+							"filters":     []map[string]any{{"field_id": "valuation.pe_ttm", "operator": "lte", "value": "15"}},
+							"ranking":     map[string]any{"field_id": "technical.volume", "direction": "desc"},
+							"top_n":       20,
+						}},
+					},
+				},
+			},
+			"responses": map[string]any{
+				"200": jsonReferenceResponse("量化选股临时执行结果", "#/components/schemas/ScreenerRunResponse"),
+				"400": errorResponse("选股条件或规格无效"),
+				"404": errorResponse("选股 Universe 不存在"),
+				"405": errorResponse("请求方法不被允许"),
+				"503": errorResponse("选股数据或执行快照不可用"),
+			},
+		},
+	}
+}
+
 func stockValuationResponse() map[string]any {
 	return map[string]any{
 		"description": "股票估值、历史分位与同业中位数",
@@ -444,6 +475,17 @@ func apiComponents() map[string]any {
 			"StockIndustryComparisonMetrics": stockIndustryComparisonMetricsSchema(),
 			"StockIndustryMetric":            stockIndustryMetricSchema(),
 			"StockValuationSource":           stockValuationSourceSchema(),
+			"ScreenerRunRequest":             screenerRunRequestSchema(),
+			"ScreenerSpec":                   screenerSpecSchema(),
+			"ScreenerFilter":                 screenerFilterSchema(),
+			"ScreenerRanking":                screenerRankingSchema(),
+			"ScreenerRunResponse":            screenerRunResponseSchema(),
+			"ScreenerSnapshot":               screenerSnapshotSchema(),
+			"ScreenerUniverse":               screenerUniverseSchema(),
+			"ScreenerResult":                 screenerResultSchema(),
+			"ScreenerRankingResult":          screenerRankingResultSchema(),
+			"ScreenerFieldResult":            screenerFieldResultSchema(),
+			"ScreenerSource":                 screenerSourceSchema(),
 		},
 	}
 }
@@ -876,6 +918,156 @@ func financialNullablePercent(description string) map[string]any {
 
 func financialNullableRatio(description string) map[string]any {
 	return map[string]any{"type": "string", "nullable": true, "description": description, "example": "2.53"}
+}
+
+func screenerRunRequestSchema() map[string]any {
+	return map[string]any{"type": "object", "required": []string{"spec"}, "properties": map[string]any{"spec": map[string]any{"$ref": "#/components/schemas/ScreenerSpec"}}}
+}
+
+func screenerSpecSchema() map[string]any {
+	return map[string]any{
+		"type":        "object",
+		"required":    []string{"universe_id", "filters", "ranking", "top_n"},
+		"description": "仅允许已发布的 canonical field_id、平面 AND 条件和单一排序字段；因子字段在 FAC-001 读模型交付前不开放。",
+		"properties": map[string]any{
+			"universe_id": map[string]any{"type": "string", "enum": []string{"cn_a_share_active"}, "example": "cn_a_share_active"},
+			"filters":     map[string]any{"type": "array", "maxItems": 20, "items": map[string]any{"$ref": "#/components/schemas/ScreenerFilter"}},
+			"ranking":     map[string]any{"$ref": "#/components/schemas/ScreenerRanking"},
+			"top_n":       map[string]any{"type": "integer", "minimum": 1, "maximum": 100, "example": 20},
+		},
+		"x-field-registry": screenerFieldRegistry(),
+	}
+}
+
+func screenerFilterSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"field_id", "operator", "value"},
+		"properties": map[string]any{
+			"field_id": map[string]any{"type": "string", "enum": screenerFieldIDs()},
+			"operator": map[string]any{"type": "string", "enum": []string{"eq", "neq", "gt", "gte", "lt", "lte", "between"}},
+			"value": map[string]any{"oneOf": []any{
+				map[string]any{"type": "string", "description": "十进制字符串，保持 API 精度。"},
+				map[string]any{"type": "array", "minItems": 2, "maxItems": 2, "items": map[string]any{"type": "string"}, "description": "between 的闭区间下限和上限。"},
+			}},
+		},
+	}
+}
+
+func screenerRankingSchema() map[string]any {
+	return map[string]any{"type": "object", "required": []string{"field_id", "direction"}, "description": "排序值相同时固定按 Markets code（symbol）升序稳定排序。", "properties": map[string]any{
+		"field_id":  map[string]any{"type": "string", "enum": screenerFieldIDs(), "description": "只能引用 registry 中 sortable=true 的字段。"},
+		"direction": map[string]any{"type": "string", "enum": []string{"asc", "desc"}},
+	}}
+}
+
+func screenerRunResponseSchema() map[string]any {
+	return map[string]any{"type": "object", "required": []string{"spec", "snapshot", "universe", "matched_count", "returned_count", "results", "source"}, "properties": map[string]any{
+		"spec":           map[string]any{"$ref": "#/components/schemas/ScreenerSpec"},
+		"snapshot":       map[string]any{"$ref": "#/components/schemas/ScreenerSnapshot"},
+		"universe":       map[string]any{"$ref": "#/components/schemas/ScreenerUniverse"},
+		"matched_count":  map[string]any{"type": "integer", "minimum": 0},
+		"returned_count": map[string]any{"type": "integer", "minimum": 0},
+		"results":        map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/ScreenerResult"}},
+		"source":         map[string]any{"$ref": "#/components/schemas/ScreenerSource"},
+	}}
+}
+
+func screenerSnapshotSchema() map[string]any {
+	return map[string]any{"type": "object", "required": []string{"as_of", "field_as_of", "definition_versions"}, "properties": map[string]any{
+		"as_of":               map[string]any{"type": "string", "format": "date"},
+		"field_as_of":         map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string", "format": "date"}},
+		"definition_versions": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
+	}}
+}
+
+func screenerUniverseSchema() map[string]any {
+	return map[string]any{"type": "object", "required": []string{"id", "name", "eligible_count"}, "properties": map[string]any{
+		"id":             map[string]any{"type": "string", "example": "cn_a_share_active"},
+		"name":           map[string]any{"type": "string", "example": "A 股在市股票"},
+		"eligible_count": map[string]any{"type": "integer", "minimum": 0},
+	}}
+}
+
+func screenerResultSchema() map[string]any {
+	return map[string]any{"type": "object", "required": []string{"symbol", "name", "industries", "rank", "ranking", "fields"}, "properties": map[string]any{
+		"symbol":     map[string]any{"type": "string", "description": "直接复用 Markets 返回的 code。", "example": "000001.SZ"},
+		"name":       map[string]any{"type": "string", "example": "平安银行"},
+		"industries": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		"rank":       map[string]any{"type": "integer", "minimum": 1},
+		"ranking":    map[string]any{"$ref": "#/components/schemas/ScreenerRankingResult"},
+		"fields":     map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/ScreenerFieldResult"}},
+	}}
+}
+
+func screenerRankingResultSchema() map[string]any {
+	return screenerFieldResultSchema()
+}
+
+func screenerFieldResultSchema() map[string]any {
+	return map[string]any{"type": "object", "required": []string{"field_id", "label", "value", "unit", "basis", "as_of", "unavailable_reason"}, "properties": map[string]any{
+		"field_id":           map[string]any{"type": "string", "enum": screenerFieldIDs()},
+		"label":              map[string]any{"type": "string"},
+		"value":              map[string]any{"type": "string", "nullable": true},
+		"unit":               map[string]any{"type": "string"},
+		"basis":              map[string]any{"type": "string", "nullable": true},
+		"as_of":              map[string]any{"type": "string", "format": "date", "nullable": true},
+		"unavailable_reason": map[string]any{"type": "string", "nullable": true},
+	}}
+}
+
+func screenerSourceSchema() map[string]any {
+	return map[string]any{"type": "object", "required": []string{"mode", "provider", "seed_version", "as_of"}, "properties": map[string]any{
+		"mode":         map[string]any{"type": "string", "enum": []string{"demo", "real", "fallback"}},
+		"provider":     map[string]any{"type": "string"},
+		"seed_version": map[string]any{"type": "string"},
+		"as_of":        map[string]any{"type": "string", "format": "date"},
+	}}
+}
+
+func screenerFieldIDs() []string {
+	return []string{"market.market_cap", "market.turnover_rate", "technical.close", "technical.volume", "technical.turnover_amount", "valuation.pe_ttm", "valuation.pb", "valuation.ps_ttm", "fundamental.revenue", "fundamental.net_profit", "fundamental.total_assets", "fundamental.total_liabilities", "fundamental.total_equity", "fundamental.operating_cash_flow", "fundamental.roe_pct"}
+}
+
+func screenerFieldRegistry() []map[string]any {
+	operators := []string{"eq", "neq", "gt", "gte", "lt", "lte", "between"}
+	result := make([]map[string]any, 0, len(screenerFieldIDs()))
+	for _, id := range screenerFieldIDs() {
+		category, label, unit := "", "", ""
+		switch id {
+		case "market.market_cap":
+			category, label, unit = "Market", "总市值", "CNY"
+		case "market.turnover_rate":
+			category, label, unit = "Market", "换手率", "%"
+		case "technical.close":
+			category, label, unit = "Technical", "收盘价", "CNY"
+		case "technical.volume":
+			category, label, unit = "Technical", "成交量", "股"
+		case "technical.turnover_amount":
+			category, label, unit = "Technical", "成交额", "CNY"
+		case "valuation.pe_ttm":
+			category, label, unit = "Valuation", "市盈率 TTM", "倍"
+		case "valuation.pb":
+			category, label, unit = "Valuation", "市净率", "倍"
+		case "valuation.ps_ttm":
+			category, label, unit = "Valuation", "市销率 TTM", "倍"
+		case "fundamental.revenue":
+			category, label, unit = "Fundamental", "营业收入", "CNY"
+		case "fundamental.net_profit":
+			category, label, unit = "Fundamental", "净利润", "CNY"
+		case "fundamental.total_assets":
+			category, label, unit = "Fundamental", "总资产", "CNY"
+		case "fundamental.total_liabilities":
+			category, label, unit = "Fundamental", "总负债", "CNY"
+		case "fundamental.total_equity":
+			category, label, unit = "Fundamental", "股东权益", "CNY"
+		case "fundamental.operating_cash_flow":
+			category, label, unit = "Fundamental", "经营现金流", "CNY"
+		case "fundamental.roe_pct":
+			category, label, unit = "Fundamental", "ROE", "%"
+		}
+		result = append(result, map[string]any{"field_id": id, "category": category, "label": label, "unit": unit, "value_type": "decimal", "operators": operators, "sortable": true})
+	}
+	return result
 }
 
 func responseSchema() map[string]any {

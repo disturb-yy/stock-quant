@@ -15,7 +15,7 @@
 - `domain/index_snapshot.go`：指数快照业务概念和校验。
 - `domain/market_breadth.go`：市场宽度和成交额统计概念。
 - `domain/sector.go`：行业分类、行业成分及等权表现聚合规则。
-- `provider.go`：demo/real/fallback 模式及 Provider 名称解析；当前 real 仅为未来实现保留。
+- `provider.go`：demo/real/fallback 模式、Tushare Provider 名称和来源元数据解析。
 - `service.go`：`MarketOverview` 查询服务、四指数完整性校验和来源标记。
 - `sectors.go`：`MarketSectors` 查询服务、最新交易日校验和来源标记。
 - `signals.go`：市场信号扫描 application service、参数规范化、历史完整性校验和来源标记。

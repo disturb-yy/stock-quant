@@ -12,15 +12,20 @@ import (
 
 // MySQLFinancialsReader 从 MySQL 读取股票财务报告及 Seed 元数据。
 type MySQLFinancialsReader struct {
-	db *sql.DB
+	db           *sql.DB
+	metadataName string
 }
 
 // NewMySQLFinancialsReader 创建股票财务报告 MySQL 读取器。
-func NewMySQLFinancialsReader(db *sql.DB) (*MySQLFinancialsReader, error) {
+func NewMySQLFinancialsReader(db *sql.DB, metadataNames ...string) (*MySQLFinancialsReader, error) {
 	if db == nil {
 		return nil, errors.New("stock financials database connection is required")
 	}
-	return &MySQLFinancialsReader{db: db}, nil
+	metadataName := "fnd-003-demo"
+	if len(metadataNames) > 0 && metadataNames[0] != "" {
+		metadataName = metadataNames[0]
+	}
+	return &MySQLFinancialsReader{db: db, metadataName: metadataName}, nil
 }
 
 // ReadStockFinancials 读取同一期间口径的全部报告，范围由 Application 层截取。
@@ -56,7 +61,7 @@ func (reader *MySQLFinancialsReader) readFinancialSource(ctx context.Context) (s
 	var seedVersion, asOf string
 	err := reader.db.QueryRowContext(ctx, `
 		SELECT seed_version, DATE_FORMAT(as_of, '%Y-%m-%d')
-		FROM demo_seed_metadata WHERE seed_name = ?`, "fnd-003-demo").Scan(&seedVersion, &asOf)
+		FROM demo_seed_metadata WHERE seed_name = ?`, reader.metadataName).Scan(&seedVersion, &asOf)
 	if err != nil {
 		return "", "", fmt.Errorf("read stock financial source: %w", err)
 	}

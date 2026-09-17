@@ -164,7 +164,22 @@ cd /home/jadon/projects/go/stock-quant && ./scripts/dev/start.sh
 DB_HOST=127.0.0.1 DB_PORT=3307 DB_NAME=stock_quant_dev DB_USER=stock_quant DB_PASSWORD=stock_quant_dev go run ./cmd/seed
 ```
 
-开发状态接口为 `GET http://127.0.0.1:8357/api/v1/dev/demo-status`，市场概览接口为 `GET http://127.0.0.1:8357/api/v1/markets/overview`，行业表现接口为 `GET http://127.0.0.1:8357/api/v1/markets/sectors`，市场信号接口为 `GET http://127.0.0.1:8357/api/v1/markets/signals?type=volume_surge&params=%7B%22window%22%3A20%2C%22multiple%22%3A1.5%7D`，股票排行榜接口为 `GET http://127.0.0.1:8357/api/v1/markets/rankings?metric=gain&page=1&page_size=20`，股票详情接口为 `GET http://127.0.0.1:8357/api/v1/stocks/000001.SZ`，股票研究型日线接口为 `GET http://127.0.0.1:8357/api/v1/stocks/000001.SZ/bars?range=120d&adjust=none&benchmark=000300.SH`，股票财务接口为 `GET http://127.0.0.1:8357/api/v1/stocks/000001.SZ/financials?period=annual&range=5y`，OpenAPI 为 `GET http://127.0.0.1:8357/api/v1/openapi.json`。`mode=demo` 表示数据库中 fixture 版本和六类计数完全匹配；`mode=fallback` 表示尚未 seed 或请求了当前未实现的真实 Provider；`mode=real` 为未来真实 Provider 实现保留，当前不会被伪装返回。市场概览、行业表现、市场信号、股票排行榜、股票研究型日线和股票财务响应中的 `source` 会明确标记 Seed 版本；股票详情的 `as_of` 和指标 `basis` 直接来自 Seed 数据。
+开发状态接口为 `GET http://127.0.0.1:8357/api/v1/dev/demo-status`，市场概览接口为 `GET http://127.0.0.1:8357/api/v1/markets/overview`，行业表现接口为 `GET http://127.0.0.1:8357/api/v1/markets/sectors`，市场信号接口为 `GET http://127.0.0.1:8357/api/v1/markets/signals?type=volume_surge&params=%7B%22window%22%3A20%2C%22multiple%22%3A1.5%7D`，股票排行榜接口为 `GET http://127.0.0.1:8357/api/v1/markets/rankings?metric=gain&page=1&page_size=20`，股票详情接口为 `GET http://127.0.0.1:8357/api/v1/stocks/000001.SZ`，股票研究型日线接口为 `GET http://127.0.0.1:8357/api/v1/stocks/000001.SZ/bars?range=120d&adjust=none&benchmark=000300.SH`，股票财务接口为 `GET http://127.0.0.1:8357/api/v1/stocks/000001.SZ/financials?period=annual&range=5y`，OpenAPI 为 `GET http://127.0.0.1:8357/api/v1/openapi.json`。`mode=demo` 表示数据库中 fixture 版本和六类计数完全匹配；`mode=fallback` 表示尚未 seed 或真实 Provider 尚未完成同步；`mode=real` 表示 Tushare 数据已成功同步并落入 MySQL。市场概览、行业表现、市场信号、股票排行榜、股票研究型日线和股票财务响应中的 `source` 会明确标记当前数据版本；股票详情的 `as_of` 和指标 `basis` 直接来自当前读模型。
+
+## Tushare Pro 同步
+
+真实模式要求使用与 Demo 隔离的 MySQL 数据库，并提供 Token。服务启动时会同步股票基础信息、日线、每日指标、复权因子和四个市场指数，然后所有 API 继续读取 MySQL：
+
+```bash
+DATA_PROVIDER=tushare \
+TUSHARE_TOKEN=你的_token \
+DB_NAME=stock_quant_tushare \
+TUSHARE_START_DATE=20260101 \
+TUSHARE_END_DATE=20260918 \
+go run ./cmd/server
+```
+
+未设置 `TUSHARE_START_DATE`/`TUSHARE_END_DATE` 时默认同步结束日前 30 天。Token 不会写入日志；Tushare 请求或同步失败会阻止真实模式启动，不会回退到 Demo。
 
 ## 静态检查
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // DefaultHTTPAddress 是 HTTP 服务默认监听地址。
@@ -18,6 +19,16 @@ type Database struct {
 	Name     string
 	User     string
 	Password string
+}
+
+// Tushare 包含 Tushare Pro 同步所需的运行时配置。
+type Tushare struct {
+	Token        string
+	Endpoint     string
+	StartDate    string
+	EndDate      string
+	LookbackDays int
+	Timeout      time.Duration
 }
 
 // Logging 包含构造应用日志实例所需的运行时配置。
@@ -42,6 +53,18 @@ func LoadEnvironment() string {
 // LoadDataProvider 读取 Provider 请求模式。默认使用本地演示 fixture。
 func LoadDataProvider() string {
 	return strings.ToLower(valueOrDefault(os.Getenv("DATA_PROVIDER"), "demo"))
+}
+
+// LoadTushare 读取 Tushare Pro 配置。Token 只从环境变量读取，不写入日志。
+func LoadTushare() Tushare {
+	return Tushare{
+		Token:        strings.TrimSpace(os.Getenv("TUSHARE_TOKEN")),
+		Endpoint:     valueOrDefault(os.Getenv("TUSHARE_ENDPOINT"), "https://api.tushare.pro"),
+		StartDate:    strings.TrimSpace(os.Getenv("TUSHARE_START_DATE")),
+		EndDate:      strings.TrimSpace(os.Getenv("TUSHARE_END_DATE")),
+		LookbackDays: positiveIntOrDefault(os.Getenv("TUSHARE_LOOKBACK_DAYS"), 30),
+		Timeout:      time.Duration(positiveIntOrDefault(os.Getenv("TUSHARE_TIMEOUT_SECONDS"), 15)) * time.Second,
+	}
 }
 
 // LoadDatabase 读取本地 MySQL 连接配置。
@@ -107,4 +130,12 @@ func valueOrDefault(value, fallback string) string {
 	}
 
 	return fallback
+}
+
+func positiveIntOrDefault(value string, fallback int) int {
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
 }

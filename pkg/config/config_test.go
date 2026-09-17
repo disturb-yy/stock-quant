@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestLoadServiceName(t *testing.T) {
 	tests := []struct {
@@ -39,6 +42,37 @@ func TestLoadEnvironmentAndProvider(t *testing.T) {
 	}
 	if got := LoadDataProvider(); got != "real" {
 		t.Fatalf("LoadDataProvider() = %q, want %q", got, "real")
+	}
+}
+
+func TestLoadTushare(t *testing.T) {
+	t.Setenv("TUSHARE_TOKEN", "token-value")
+	t.Setenv("TUSHARE_ENDPOINT", "https://tushare.example")
+	t.Setenv("TUSHARE_START_DATE", "20260101")
+	t.Setenv("TUSHARE_END_DATE", "20260131")
+	t.Setenv("TUSHARE_LOOKBACK_DAYS", "45")
+	t.Setenv("TUSHARE_TIMEOUT_SECONDS", "20")
+
+	want := Tushare{
+		Token:        "token-value",
+		Endpoint:     "https://tushare.example",
+		StartDate:    "20260101",
+		EndDate:      "20260131",
+		LookbackDays: 45,
+		Timeout:      20 * time.Second,
+	}
+	if got := LoadTushare(); got != want {
+		t.Fatalf("LoadTushare() = %#v, want %#v", got, want)
+	}
+}
+
+func TestLoadTushareDefaultsInvalidNumbers(t *testing.T) {
+	t.Setenv("TUSHARE_LOOKBACK_DAYS", "invalid")
+	t.Setenv("TUSHARE_TIMEOUT_SECONDS", "0")
+
+	got := LoadTushare()
+	if got.Endpoint != "https://api.tushare.pro" || got.LookbackDays != 30 || got.Timeout != 15*time.Second {
+		t.Fatalf("LoadTushare() defaults = %#v", got)
 	}
 }
 

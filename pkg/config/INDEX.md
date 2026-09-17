@@ -19,7 +19,7 @@ loader.go
 
 ## Current Contents
 
-- `config.go`：读取服务标识、HTTP 监听地址和通用运行时日志配置，并提供开发、生产环境的默认值。
+- `config.go`：读取服务标识、HTTP 监听地址、通用运行时日志和 Tushare 同步配置，并提供开发、生产环境的默认值。
 
 ## Application Environment Variables
 
@@ -47,4 +47,15 @@ loader.go
 | `DB_NAME` | `stock_quant_dev` | 本地数据库名。 |
 | `DB_USER` | `stock_quant` | 本地数据库用户。 |
 | `DB_PASSWORD` | `stock_quant_dev` | 本地数据库密码；部署时通过安全配置覆盖。 |
-| `DATA_PROVIDER` | `demo` | `demo` 使用版本化 fixture；`real` 当前明确回退为 local fixture。 |
+| `DATA_PROVIDER` | `demo` | `demo` 使用版本化 fixture；`real` 或 `tushare` 启动前同步 Tushare 并以 MySQL 读模型提供 API。 |
+
+## Tushare Environment Variables
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `TUSHARE_TOKEN` | 空 | Tushare Pro Token；真实模式必填，不写入日志。 |
+| `TUSHARE_ENDPOINT` | `https://api.tushare.pro` | Tushare Pro HTTP endpoint。 |
+| `TUSHARE_START_DATE` | 结束日前 30 天 | 同步起始日期，格式 `YYYYMMDD`。 |
+| `TUSHARE_END_DATE` | 当前 UTC 日期 | 同步结束日期，格式 `YYYYMMDD`。 |
+| `TUSHARE_LOOKBACK_DAYS` | `30` | 未设置起始日期时的回溯天数。 |
+| `TUSHARE_TIMEOUT_SECONDS` | `15` | 单次 Tushare 请求超时秒数。 |

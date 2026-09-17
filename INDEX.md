@@ -22,6 +22,7 @@
 | `internal/stock` | 股票基础信息与股票详情概览领域 |
 | `internal/market` | 行情数据领域 |
 | `internal/analysis` | 股票分析领域 |
+| `internal/screener` | 量化选股执行领域 |
 | `internal/auth` | 身份认证与授权领域 |
 | `internal/health` | 跨领域健康 HTTP 接口适配 |
 | `internal/migration` | 数据库 migration 命名与执行边界 |
@@ -87,6 +88,20 @@ internal/market/
 internal/analysis/
 ```
 
+### screener
+
+负责：
+
+- 结构化选股规格与 canonical 字段 registry。
+- Universe、AND 条件、稳定排序和 Top N 执行。
+- 选股执行快照及真实来源元数据编排。
+
+入口：
+
+```text
+internal/screener/
+```
+
 ### auth
 
 负责：
@@ -121,6 +136,8 @@ internal/auth/
 | 修改行情 MySQL 查询 | `internal/market/infrastructure/mysql_overview.go` |
 | 修改 Tushare 接入 | `internal/market/infrastructure/provider_tushare.go` |
 | 修改指标计算规则 | `internal/analysis/domain` |
+| 修改量化选股执行规则 | `internal/screener/domain`、`internal/screener/service.go` |
+| 修改量化选股 MySQL 快照查询 | `internal/screener/infrastructure/mysql.go` |
 | 修改登录流程 | `internal/auth` |
 | 修改启动和依赖注入 | `cmd/server` |
 | 修改本地 demo fixture 或 seed | `internal/demo`、`cmd/seed` |

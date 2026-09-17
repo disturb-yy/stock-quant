@@ -27,3 +27,14 @@ func TestSelectProvider(t *testing.T) {
 		})
 	}
 }
+
+func TestSelectProviderWithAvailability(t *testing.T) {
+	got := SelectProviderWithAvailability("real", true, true)
+	if got.Mode != ModeReal || got.Provider != RealProviderName || got.MetadataName != TushareMetadataName {
+		t.Fatalf("real selection = %#v, want Tushare real selection", got)
+	}
+
+	if !IsRealProviderRequested("TUSHARE") || !IsRealProviderRequested("real") || IsRealProviderRequested("demo") {
+		t.Fatal("IsRealProviderRequested() did not normalize provider names")
+	}
+}

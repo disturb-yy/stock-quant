@@ -14,6 +14,8 @@ import (
 	"github.com/disturb-yy/stock-quant/internal/demo/infrastructure"
 	"github.com/disturb-yy/stock-quant/internal/market"
 	marketinfrastructure "github.com/disturb-yy/stock-quant/internal/market/infrastructure"
+	"github.com/disturb-yy/stock-quant/internal/screener"
+	screenerinfrastructure "github.com/disturb-yy/stock-quant/internal/screener/infrastructure"
 	"github.com/disturb-yy/stock-quant/internal/stock"
 	stockinfrastructure "github.com/disturb-yy/stock-quant/internal/stock/infrastructure"
 	"github.com/disturb-yy/stock-quant/pkg/config"
@@ -59,17 +61,25 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	statusReader, err := newStatusReader(applicationEnvironment, demoStore)
+	requestedProvider := config.LoadDataProvider()
+	providerSelection := market.SelectProvider(requestedProvider, true)
+	if market.IsRealProviderRequested(requestedProvider) {
+		if err := syncTushare(ctx, database, config.LoadTushare(), applicationLogger); err != nil {
+			applicationLogger.Error("synchronize Tushare data", "error", err)
+			return err
+		}
+		providerSelection = market.SelectProviderWithAvailability(requestedProvider, true, true)
+	}
+	statusReader, err := newStatusReader(applicationEnvironment, demoStore, requestedProvider)
 	if err != nil {
 		applicationLogger.Error("initialize demo status service", "error", err)
 		return err
 	}
-	overviewReader, err := marketinfrastructure.NewMySQLOverviewReader(database)
+	overviewReader, err := marketinfrastructure.NewMySQLOverviewReader(database, providerSelection.MetadataName)
 	if err != nil {
 		applicationLogger.Error("initialize market overview reader", "error", err)
 		return err
 	}
-	providerSelection := market.SelectProvider(config.LoadDataProvider(), true)
 	overviewService, err := market.NewOverviewService(
 		overviewReader,
 		providerSelection,
@@ -103,7 +113,7 @@ func run(ctx context.Context) error {
 		applicationLogger.Error("initialize stock overview service", "error", err)
 		return err
 	}
-	financialsReader, err := stockinfrastructure.NewMySQLFinancialsReader(database)
+	financialsReader, err := stockinfrastructure.NewMySQLFinancialsReader(database, providerSelection.MetadataName)
 	if err != nil {
 		applicationLogger.Error("initialize stock financials reader", "error", err)
 		return err
@@ -113,7 +123,7 @@ func run(ctx context.Context) error {
 		applicationLogger.Error("initialize stock financials service", "error", err)
 		return err
 	}
-	valuationReader, err := stockinfrastructure.NewMySQLValuationReader(database)
+	valuationReader, err := stockinfrastructure.NewMySQLValuationReader(database, providerSelection.MetadataName)
 	if err != nil {
 		applicationLogger.Error("initialize stock valuation reader", "error", err)
 		return err
@@ -123,12 +133,22 @@ func run(ctx context.Context) error {
 		applicationLogger.Error("initialize stock valuation service", "error", err)
 		return err
 	}
+	screenerReader, err := screenerinfrastructure.NewMySQLReader(database, screener.Source{Mode: string(providerSelection.Mode), Provider: providerSelection.Provider}, providerSelection.MetadataName)
+	if err != nil {
+		applicationLogger.Error("initialize screener reader", "error", err)
+		return err
+	}
+	screenerService, err := screener.NewService(screenerReader)
+	if err != nil {
+		applicationLogger.Error("initialize screener service", "error", err)
+		return err
+	}
 	barsService, err := market.NewBarsService(overviewReader, providerSelection)
 	if err != nil {
 		applicationLogger.Error("initialize stock bars service", "error", err)
 		return err
 	}
-	server := newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuation(applicationLogger, httpAddress, overviewService, sectorService, signalService, rankingService, stockService, barsService, financialsService, valuationService, statusReader)
+	server := newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger, httpAddress, overviewService, sectorService, signalService, rankingService, stockService, barsService, financialsService, valuationService, screenerService, statusReader)
 	applicationLogger.Info("HTTP server starting", "address", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		applicationLogger.Error("HTTP server stopped", "error", err)
@@ -178,9 +198,31 @@ func openDemoDatabase(ctx context.Context) (*sql.DB, error) {
 	return database, nil
 }
 
-func newStatusReader(environment string, store demo.StatusStore) (demo.StatusReader, error) {
+func syncTushare(ctx context.Context, database *sql.DB, settings config.Tushare, applicationLogger *slog.Logger) error {
+	client, err := marketinfrastructure.NewTushareClient(settings)
+	if err != nil {
+		return fmt.Errorf("initialize Tushare client: %w", err)
+	}
+	syncer, err := marketinfrastructure.NewTushareSyncer(database, client)
+	if err != nil {
+		return fmt.Errorf("initialize Tushare syncer: %w", err)
+	}
+	summary, err := syncer.Sync(ctx, marketinfrastructure.TushareSyncOptions{
+		StartDate: settings.StartDate, EndDate: settings.EndDate, LookbackDays: settings.LookbackDays, MetadataName: market.TushareMetadataName,
+	})
+	if err != nil {
+		return fmt.Errorf("run Tushare sync: %w", err)
+	}
+	applicationLogger.Info("Tushare data synchronized", "provider", summary.Provider, "as_of", summary.AsOf, "daily_bars", summary.DailyBars, "daily_basics", summary.DailyBasics, "factors", summary.Factors, "indexes", summary.Indexes)
+	return nil
+}
+
+func newStatusReader(environment string, store demo.StatusStore, requestedProvider string) (demo.StatusReader, error) {
 	if environment != "development" {
 		return nil, nil
 	}
-	return demo.NewService(store, config.LoadDataProvider())
+	if market.IsRealProviderRequested(requestedProvider) {
+		return nil, nil
+	}
+	return demo.NewService(store, requestedProvider)
 }
