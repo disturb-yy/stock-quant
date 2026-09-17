@@ -15,7 +15,7 @@ func TestDemoFixtureIsVersionedAndDeterministic(t *testing.T) {
 	if first.Version != SeedVersion || first.AsOf != SeedAsOf {
 		t.Fatalf("fixture identity = %q/%q, want %q/%q", first.Version, first.AsOf, SeedVersion, SeedAsOf)
 	}
-	if got, want := first.DataCounts(), (Counts{Instruments: 10, DailyBars: 1210, FinancialMetrics: 16, FinancialReports: 27, DailyBasics: 3, IndexSnapshots: 124}); got != want {
+	if got, want := first.DataCounts(), (Counts{Instruments: 10, DailyBars: 1210, FinancialMetrics: 16, FinancialReports: 27, DailyBasics: 3, ValuationSnapshots: 12, IndexSnapshots: 124}); got != want {
 		t.Fatalf("fixture counts = %#v, want %#v", got, want)
 	}
 	if first.DailyBars[120].TradeDate != SeedAsOf || len(first.DailyBars) < 121 {

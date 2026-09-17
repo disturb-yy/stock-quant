@@ -21,7 +21,7 @@ func (reader *fakeBarsReader) ReadStockBars(_ context.Context, request BarsReque
 
 func TestBarsServiceBuildsAdjustedBarsAndBenchmark(t *testing.T) {
 	reader := &fakeBarsReader{snapshot: BarsSnapshot{
-		Symbol: "000001.SZ", Name: "平安银行", SeedVersion: "fnd-003-demo-v7",
+		Symbol: "000001.SZ", Name: "平安银行", SeedVersion: "fnd-003-demo-v8",
 		Bars: []domain.BarWithAdjustment{
 			{Bar: barsDailyBar("2024-06-03", "10.00", 100), QFQFactor: "0.95", HFQFactor: "1.10"},
 			{Bar: barsDailyBar("2024-06-04", "11.00", 200), QFQFactor: "1.00", HFQFactor: "1.20"},
@@ -52,7 +52,7 @@ func TestBarsServiceBuildsAdjustedBarsAndBenchmark(t *testing.T) {
 	if result.Benchmark == nil || len(result.Benchmark.Points) != 2 || result.Benchmark.Points[1].RelativeReturnPct != "14.69" {
 		t.Fatalf("benchmark = %#v, want normalized common-date returns", result.Benchmark)
 	}
-	if result.Source.SeedVersion != "fnd-003-demo-v7" || result.Source.Mode != ModeDemo {
+	if result.Source.SeedVersion != "fnd-003-demo-v8" || result.Source.Mode != ModeDemo {
 		t.Fatalf("source = %#v, want demo provenance", result.Source)
 	}
 }

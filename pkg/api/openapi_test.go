@@ -34,7 +34,7 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if document.Info.Version != "v1" {
 		t.Fatalf("info.version = %q, want %q", document.Info.Version, "v1")
 	}
-	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/stocks/{symbol}", "/api/v1/stocks/{symbol}/bars", "/api/v1/stocks/{symbol}/financials", "/api/v1/openapi.json"} {
+	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/stocks/{symbol}", "/api/v1/stocks/{symbol}/bars", "/api/v1/stocks/{symbol}/financials", "/api/v1/stocks/{symbol}/valuation", "/api/v1/openapi.json"} {
 		if _, ok := document.Paths[path]; !ok {
 			t.Fatalf("OpenAPI paths missing %q", path)
 		}
@@ -42,10 +42,48 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if _, ok := document.Paths["/api/v1/dev/demo-status"]; !ok {
 		t.Fatal("OpenAPI paths missing development demo status")
 	}
-	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult", "MarketRankings", "MarketRanking", "StockOverview", "StockQuote", "StockMetrics", "StockMetric", "StockSparkline", "StockSparklinePoint", "StockBars", "StockBar", "StockEffectiveRange", "StockBenchmark", "StockBenchmarkPoint", "StockFinancials", "StockFinancialSummary", "StockFinancialReport", "StockFinancialIncome", "StockFinancialBalance", "StockFinancialCashFlow", "StockFinancialIndicators", "StockFinancialSource"} {
+	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult", "MarketRankings", "MarketRanking", "StockOverview", "StockQuote", "StockMetrics", "StockMetric", "StockSparkline", "StockSparklinePoint", "StockBars", "StockBar", "StockEffectiveRange", "StockBenchmark", "StockBenchmarkPoint", "StockFinancials", "StockFinancialSummary", "StockFinancialReport", "StockFinancialIncome", "StockFinancialBalance", "StockFinancialCashFlow", "StockFinancialIndicators", "StockFinancialSource", "StockValuation", "StockValuationMetrics", "StockValuationMetric", "StockValuationCurrent", "StockValuationPoint", "StockValuationPercentile", "StockIndustry", "StockIndustryComparison", "StockIndustryComparisonMetrics", "StockIndustryMetric", "StockValuationSource"} {
 		if _, ok := document.Components.Schemas[schema]; !ok {
 			t.Fatalf("OpenAPI schemas missing %q", schema)
 		}
+	}
+}
+
+func TestOpenAPIStockValuationContract(t *testing.T) {
+	document := OpenAPIDocument()
+	paths := document["paths"].(map[string]any)
+	get := paths["/api/v1/stocks/{symbol}/valuation"].(map[string]any)["get"].(map[string]any)
+	if get["operationId"] != "getStockValuation" {
+		t.Fatalf("stock valuation operation = %#v, want getStockValuation", get["operationId"])
+	}
+	parameters := get["parameters"].([]any)
+	if len(parameters) != 2 || parameters[1].(map[string]any)["name"] != "range" {
+		t.Fatalf("stock valuation parameters = %#v, want symbol/range", parameters)
+	}
+	rangeSchema := parameters[1].(map[string]any)["schema"].(map[string]any)
+	if rangeSchema["default"] != "5y" || len(rangeSchema["enum"].([]string)) != 2 {
+		t.Fatalf("valuation range schema = %#v, want 3y/5y default 5y", rangeSchema)
+	}
+	responses := get["responses"].(map[string]any)
+	for _, status := range []string{"200", "400", "404", "405", "503"} {
+		if _, ok := responses[status]; !ok {
+			t.Fatalf("stock valuation responses missing %s", status)
+		}
+	}
+	components := document["components"].(map[string]any)["schemas"].(map[string]any)
+	metric := components["StockValuationMetric"].(map[string]any)["properties"].(map[string]any)
+	if metric["position"].(map[string]any)["nullable"] != true {
+		t.Fatal("StockValuationMetric.position must be nullable")
+	}
+	percentile := components["StockValuationPercentile"].(map[string]any)["properties"].(map[string]any)
+	for _, field := range []string{"value", "range_from", "range_to"} {
+		if percentile[field].(map[string]any)["nullable"] != true {
+			t.Fatalf("StockValuationPercentile.%s must be nullable", field)
+		}
+	}
+	industryMetric := components["StockIndustryMetric"].(map[string]any)["properties"].(map[string]any)
+	if industryMetric["value"].(map[string]any)["nullable"] != true {
+		t.Fatal("StockIndustryMetric.value must be nullable")
 	}
 }
 

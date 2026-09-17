@@ -105,6 +105,26 @@ func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancials(applicat
 }, financialsReader interface {
 	Financials(context.Context, stock.FinancialsRequest) (stock.StockFinancials, error)
 }, statusReaders ...demo.StatusReader) *gin.Engine {
+	return newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuation(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, nil, statusReaders...)
+}
+
+func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuation(applicationLogger *slog.Logger, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
+}, signalReader interface {
+	Scan(context.Context, market.SignalRequest) (market.MarketSignals, error)
+}, rankingReader interface {
+	Rank(context.Context, market.RankingRequest) (market.MarketRankings, error)
+}, stockOverviewReader interface {
+	Overview(context.Context, string) (stock.StockOverview, error)
+}, barsReader interface {
+	Bars(context.Context, market.BarsRequest) (market.StockBars, error)
+}, financialsReader interface {
+	Financials(context.Context, stock.FinancialsRequest) (stock.StockFinancials, error)
+}, valuationReader interface {
+	Valuation(context.Context, stock.ValuationRequest) (stock.StockValuation, error)
+}, statusReaders ...demo.StatusReader) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(logger.GinMiddleware(applicationLogger), gin.CustomRecovery(apiV1RecoveryHandler))
@@ -122,6 +142,7 @@ func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancials(applicat
 	stock.RegisterOverviewRoutes(apiV1, stockOverviewReader)
 	market.RegisterBarsRoutes(apiV1, barsReader)
 	stock.RegisterFinancialsRoutes(apiV1, financialsReader)
+	stock.RegisterValuationRoutes(apiV1, valuationReader)
 	if len(statusReaders) > 0 {
 		demo.RegisterRoutes(apiV1, statusReaders[0])
 	}
@@ -222,9 +243,29 @@ func newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancials(appl
 }, financialsReader interface {
 	Financials(context.Context, stock.FinancialsRequest) (stock.StockFinancials, error)
 }, statusReaders ...demo.StatusReader) *http.Server {
+	return newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuation(applicationLogger, address, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, nil, statusReaders...)
+}
+
+func newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuation(applicationLogger *slog.Logger, address string, overviewReader interface {
+	Overview(context.Context) (market.MarketOverview, error)
+}, sectorReader interface {
+	Sectors(context.Context) (market.MarketSectors, error)
+}, signalReader interface {
+	Scan(context.Context, market.SignalRequest) (market.MarketSignals, error)
+}, rankingReader interface {
+	Rank(context.Context, market.RankingRequest) (market.MarketRankings, error)
+}, stockOverviewReader interface {
+	Overview(context.Context, string) (stock.StockOverview, error)
+}, barsReader interface {
+	Bars(context.Context, market.BarsRequest) (market.StockBars, error)
+}, financialsReader interface {
+	Financials(context.Context, stock.FinancialsRequest) (stock.StockFinancials, error)
+}, valuationReader interface {
+	Valuation(context.Context, stock.ValuationRequest) (stock.StockValuation, error)
+}, statusReaders ...demo.StatusReader) *http.Server {
 	return &http.Server{
 		Addr:    address,
-		Handler: newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancials(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, statusReaders...),
+		Handler: newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuation(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, statusReaders...),
 	}
 }
 

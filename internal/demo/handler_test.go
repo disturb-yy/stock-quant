@@ -25,7 +25,7 @@ func TestRegisterRoutesReturnsDemoStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	RegisterRoutes(router.Group("/api/v1"), fakeStatusReader{
-		status: DemoStatus{Mode: "demo", Provider: "mysql-demo-fixture", SeedVersion: SeedVersion, Counts: Counts{Instruments: 10, DailyBars: 1210, FinancialMetrics: 16, FinancialReports: 27, IndexSnapshots: 124}},
+		status: DemoStatus{Mode: "demo", Provider: "mysql-demo-fixture", SeedVersion: SeedVersion, Counts: Counts{Instruments: 10, DailyBars: 1210, FinancialMetrics: 16, FinancialReports: 27, ValuationSnapshots: 12, IndexSnapshots: 124}},
 	})
 
 	response := httptest.NewRecorder()

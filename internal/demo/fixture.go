@@ -14,7 +14,7 @@ const (
 	// SeedName 是数据库中演示数据元数据的稳定名称。
 	SeedName = "fnd-003-demo"
 	// SeedVersion 是本 US 的可追踪 fixture 版本。
-	SeedVersion = "fnd-003-demo-v7"
+	SeedVersion = "fnd-003-demo-v8"
 	// SeedAsOf 是 fixture 的统一观测日期。
 	SeedAsOf = "2024-06-28"
 	// SeedObservedAt 是 Seed 数据统一的 UTC 观测时间。
@@ -23,27 +23,29 @@ const (
 
 // Counts 是演示数据各类记录的数量。
 type Counts struct {
-	Instruments      int64 `json:"instruments"`
-	DailyBars        int64 `json:"daily_bars"`
-	FinancialMetrics int64 `json:"financial_metrics"`
-	FinancialReports int64 `json:"financial_reports"`
-	DailyBasics      int64 `json:"daily_basics"`
-	IndexSnapshots   int64 `json:"index_snapshots"`
+	Instruments        int64 `json:"instruments"`
+	DailyBars          int64 `json:"daily_bars"`
+	FinancialMetrics   int64 `json:"financial_metrics"`
+	FinancialReports   int64 `json:"financial_reports"`
+	DailyBasics        int64 `json:"daily_basics"`
+	ValuationSnapshots int64 `json:"valuation_snapshots"`
+	IndexSnapshots     int64 `json:"index_snapshots"`
 }
 
 // Fixture 是一次完整、确定的演示数据输入。
 type Fixture struct {
-	Version           string
-	AsOf              string
-	Instruments       []stockdomain.Instrument
-	Sectors           []marketdomain.Sector
-	SectorMemberships []marketdomain.SectorMembership
-	DailyBars         []marketdomain.DailyBar
-	AdjustmentFactors []marketdomain.AdjustmentFactor
-	DailyBasics       []marketdomain.DailyBasic
-	FinancialMetrics  []analysisdomain.FinancialMetric
-	FinancialReports  []stockdomain.FinancialReport
-	IndexSnapshots    []marketdomain.IndexSnapshot
+	Version            string
+	AsOf               string
+	Instruments        []stockdomain.Instrument
+	Sectors            []marketdomain.Sector
+	SectorMemberships  []marketdomain.SectorMembership
+	DailyBars          []marketdomain.DailyBar
+	AdjustmentFactors  []marketdomain.AdjustmentFactor
+	DailyBasics        []marketdomain.DailyBasic
+	FinancialMetrics   []analysisdomain.FinancialMetric
+	FinancialReports   []stockdomain.FinancialReport
+	ValuationSnapshots []stockdomain.ValuationObservation
+	IndexSnapshots     []marketdomain.IndexSnapshot
 }
 
 // DemoFixture 返回新的 fixture 值，调用方可以安全地修改其切片。
@@ -60,6 +62,9 @@ func DemoFixture() Fixture {
 		},
 		SectorMemberships: []marketdomain.SectorMembership{
 			{SectorCode: "BANK", InstrumentCode: "000001.SZ"},
+			{SectorCode: "BANK", InstrumentCode: "601166.SH"},
+			{SectorCode: "BANK", InstrumentCode: "601398.SH"},
+			{SectorCode: "BANK", InstrumentCode: "600036.SH"},
 			{SectorCode: "EQUIPMENT", InstrumentCode: "300750.SZ"},
 			{SectorCode: "FOOD_BEVERAGE", InstrumentCode: "600519.SH"},
 		},
@@ -89,8 +94,9 @@ func DemoFixture() Fixture {
 			{InstrumentCode: "601166.SH", MetricDate: SeedAsOf, MetricName: "turnover_rate", Basis: "latest_daily_basic", MetricValue: "1.34"},
 			{InstrumentCode: "600036.SH", MetricDate: SeedAsOf, MetricName: "turnover_rate", Basis: "latest_daily_basic", MetricValue: "1.12"},
 		},
-		FinancialReports: financialReportFixture(),
-		IndexSnapshots:   demoFixtureIndexSnapshots(),
+		FinancialReports:   financialReportFixture(),
+		ValuationSnapshots: valuationFixture(),
+		IndexSnapshots:     demoFixtureIndexSnapshots(),
 	}
 }
 
@@ -259,8 +265,8 @@ func (fixture Fixture) Validate() error {
 	if fixture.Version == "" || fixture.AsOf == "" {
 		return fmt.Errorf("fixture version and as-of are required")
 	}
-	if len(fixture.Instruments) == 0 || len(fixture.Sectors) == 0 || len(fixture.SectorMemberships) == 0 || len(fixture.DailyBars) == 0 || len(fixture.DailyBasics) == 0 || len(fixture.FinancialMetrics) == 0 || len(fixture.FinancialReports) == 0 || len(fixture.IndexSnapshots) == 0 {
-		return fmt.Errorf("fixture must contain instruments, sectors, sector memberships, daily bars, daily basics, financial metrics, financial reports, and index snapshots")
+	if len(fixture.Instruments) == 0 || len(fixture.Sectors) == 0 || len(fixture.SectorMemberships) == 0 || len(fixture.DailyBars) == 0 || len(fixture.DailyBasics) == 0 || len(fixture.FinancialMetrics) == 0 || len(fixture.FinancialReports) == 0 || len(fixture.ValuationSnapshots) == 0 || len(fixture.IndexSnapshots) == 0 {
+		return fmt.Errorf("fixture must contain instruments, sectors, sector memberships, daily bars, daily basics, financial metrics, financial reports, valuation snapshots, and index snapshots")
 	}
 	for _, instrument := range fixture.Instruments {
 		if err := instrument.Validate(); err != nil {
@@ -291,10 +297,35 @@ func (fixture Fixture) Validate() error {
 	if err := validateFinancialReports(fixture); err != nil {
 		return err
 	}
+	if err := validateValuationSnapshots(fixture); err != nil {
+		return err
+	}
 	for _, index := range fixture.IndexSnapshots {
 		if err := index.Validate(); err != nil {
 			return fmt.Errorf("validate index snapshot %q: %w", index.Code, err)
 		}
+	}
+	return nil
+}
+
+func validateValuationSnapshots(fixture Fixture) error {
+	instrumentCodes := make(map[string]struct{}, len(fixture.Instruments))
+	for _, instrument := range fixture.Instruments {
+		instrumentCodes[instrument.Code] = struct{}{}
+	}
+	seen := make(map[string]struct{}, len(fixture.ValuationSnapshots))
+	for _, snapshot := range fixture.ValuationSnapshots {
+		if err := snapshot.Validate(); err != nil {
+			return fmt.Errorf("validate valuation snapshot %q/%q: %w", snapshot.InstrumentCode, snapshot.AsOf, err)
+		}
+		if _, exists := instrumentCodes[snapshot.InstrumentCode]; !exists {
+			return fmt.Errorf("valuation snapshot references unknown instrument %q", snapshot.InstrumentCode)
+		}
+		key := snapshot.InstrumentCode + "\x00" + snapshot.AsOf
+		if _, exists := seen[key]; exists {
+			return fmt.Errorf("duplicate valuation snapshot %q/%q", snapshot.InstrumentCode, snapshot.AsOf)
+		}
+		seen[key] = struct{}{}
 	}
 	return nil
 }
@@ -358,12 +389,13 @@ func validateSectors(fixture Fixture) error {
 // DataCounts 返回 fixture 的预期数量。
 func (fixture Fixture) DataCounts() Counts {
 	return Counts{
-		Instruments:      int64(len(fixture.Instruments)),
-		DailyBars:        int64(len(fixture.DailyBars)),
-		DailyBasics:      int64(len(fixture.DailyBasics)),
-		FinancialMetrics: int64(len(fixture.FinancialMetrics)),
-		FinancialReports: int64(len(fixture.FinancialReports)),
-		IndexSnapshots:   int64(len(fixture.IndexSnapshots)),
+		Instruments:        int64(len(fixture.Instruments)),
+		DailyBars:          int64(len(fixture.DailyBars)),
+		DailyBasics:        int64(len(fixture.DailyBasics)),
+		FinancialMetrics:   int64(len(fixture.FinancialMetrics)),
+		FinancialReports:   int64(len(fixture.FinancialReports)),
+		ValuationSnapshots: int64(len(fixture.ValuationSnapshots)),
+		IndexSnapshots:     int64(len(fixture.IndexSnapshots)),
 	}
 }
 

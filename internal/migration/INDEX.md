@@ -18,4 +18,4 @@
 
 - `migration.go`：校验 migration 定义并按注册顺序执行。
 - `migration_test.go`：验证空框架、命名校验、顺序、错误包装和取消行为。
-- `internal/demo/infrastructure/mysql.go`：注册 `0001_demo_seed` 至 `0006_stock_financials` 并在 MySQL 中创建 FND-003 schema。
+- `internal/demo/infrastructure/mysql.go`、`mysql_valuation.go`：注册 `0001_demo_seed` 至 `0007_stock_valuation` 并在 MySQL 中创建 FND-003 schema。

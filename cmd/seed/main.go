@@ -45,13 +45,14 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("read seeded snapshot: %w", err)
 	}
 	return json.NewEncoder(os.Stdout).Encode(map[string]any{
-		"seed_version":      snapshot.SeedVersion,
-		"as_of":             snapshot.AsOf,
-		"instruments":       snapshot.Counts.Instruments,
-		"daily_bars":        snapshot.Counts.DailyBars,
-		"daily_basics":      snapshot.Counts.DailyBasics,
-		"financial_metrics": snapshot.Counts.FinancialMetrics,
-		"financial_reports": snapshot.Counts.FinancialReports,
-		"index_snapshots":   snapshot.Counts.IndexSnapshots,
+		"seed_version":        snapshot.SeedVersion,
+		"as_of":               snapshot.AsOf,
+		"instruments":         snapshot.Counts.Instruments,
+		"daily_bars":          snapshot.Counts.DailyBars,
+		"daily_basics":        snapshot.Counts.DailyBasics,
+		"financial_metrics":   snapshot.Counts.FinancialMetrics,
+		"financial_reports":   snapshot.Counts.FinancialReports,
+		"valuation_snapshots": snapshot.Counts.ValuationSnapshots,
+		"index_snapshots":     snapshot.Counts.IndexSnapshots,
 	})
 }

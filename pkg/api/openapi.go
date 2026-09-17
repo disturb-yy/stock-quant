@@ -33,6 +33,7 @@ func apiPaths(includeDevelopment bool) map[string]any {
 		"/api/v1/stocks/{symbol}":            stockOverviewPath(),
 		"/api/v1/stocks/{symbol}/bars":       stockBarsPath(),
 		"/api/v1/stocks/{symbol}/financials": stockFinancialsPath(),
+		"/api/v1/stocks/{symbol}/valuation":  stockValuationPath(),
 		"/api/v1/openapi.json":               openAPIPath(),
 	}
 	if includeDevelopment {
@@ -290,6 +291,56 @@ func stockFinancialsPath() map[string]any {
 	}
 }
 
+func stockValuationPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "getStockValuation",
+			"summary":     "读取股票估值、历史分位与同业中位数",
+			"parameters": []any{
+				map[string]any{
+					"name": "symbol", "in": "path", "required": true,
+					"description": "直接使用 Markets API 返回的 code，不做前端转换。",
+					"schema":      map[string]any{"type": "string", "pattern": "^[A-Za-z0-9]{1,16}\\.[A-Za-z]{2,8}$", "example": "000001.SZ"},
+				},
+				map[string]any{
+					"name": "range", "in": "query", "required": false,
+					"description": "以目标股票最新可用估值观测为锚点，不使用服务机器当前日期。",
+					"schema":      map[string]any{"type": "string", "enum": []string{"3y", "5y"}, "default": "5y"},
+				},
+			},
+			"responses": map[string]any{
+				"200": stockValuationResponse(),
+				"400": errorResponse("股票估值参数无效"),
+				"404": errorResponse("股票不存在"),
+				"405": errorResponse("请求方法不被允许"),
+				"503": errorResponse("股票估值数据暂不可用"),
+			},
+		},
+	}
+}
+
+func stockValuationResponse() map[string]any {
+	return map[string]any{
+		"description": "股票估值、历史分位与同业中位数",
+		"content": map[string]any{
+			"application/json": map[string]any{
+				"schema": map[string]any{"$ref": "#/components/schemas/StockValuation"},
+				"example": map[string]any{
+					"symbol": "000001.SZ", "name": "平安银行", "requested_range": "5y",
+					"effective_range": map[string]any{"from": "2020-06-26", "to": "2024-06-28"}, "as_of": "2024-06-28",
+					"metrics": map[string]any{
+						"pe_ttm": map[string]any{"current": map[string]any{"value": "7.40", "as_of": "2024-06-28", "basis": "ttm"}, "history": []map[string]any{{"as_of": "2020-06-26", "value": "4.20"}}, "percentile": map[string]any{"value": "100.00", "sample_size": 5, "range_from": "2020-06-26", "range_to": "2024-06-28", "method": "inclusive_rank"}, "position": "high"},
+						"pb":     map[string]any{"current": map[string]any{"value": "0.52", "as_of": "2024-06-28", "basis": "latest_daily_basic"}, "history": []map[string]any{}, "percentile": map[string]any{"value": nil, "sample_size": 0, "range_from": nil, "range_to": nil, "method": "inclusive_rank"}, "position": nil},
+						"ps_ttm": map[string]any{"current": map[string]any{"value": "1.40", "as_of": "2024-06-28", "basis": "ttm"}, "history": []map[string]any{}, "percentile": map[string]any{"value": nil, "sample_size": 0, "range_from": nil, "range_to": nil, "method": "inclusive_rank"}, "position": nil},
+					},
+					"industry_comparisons": []map[string]any{{"industry": map[string]any{"code": "BANK", "name": "银行"}, "as_of": "2024-06-28", "metrics": map[string]any{"pe_ttm": map[string]any{"value": "6.00", "sample_size": 3}, "pb": map[string]any{"value": "0.70", "sample_size": 3}, "ps_ttm": map[string]any{"value": "1.20", "sample_size": 3}}}},
+					"source":               map[string]any{"mode": "demo", "provider": "mysql-demo-fixture", "seed_version": "fnd-003-demo-v8", "as_of": "2024-06-28"},
+				},
+			},
+		},
+	}
+}
+
 func stockFinancialsResponse() map[string]any {
 	return map[string]any{
 		"description": "股票财务摘要、趋势与简化报表",
@@ -302,7 +353,7 @@ func stockFinancialsResponse() map[string]any {
 					"reporting_currency": "CNY", "amount_unit": "CNY", "latest_report_date": "2023-12-31",
 					"summary": map[string]any{"period_end": "2023-12-31", "published_at": "2024-04-30", "revenue": "1600.00", "revenue_yoy_pct": "11.11", "net_profit": "272.00", "net_profit_yoy_pct": "14.48", "gross_margin_pct": "41.00", "roe_pct": "23.78", "operating_cash_flow": "345.00", "free_cash_flow": "240.00", "debt_to_asset_pct": "45.00", "current_ratio": "2.53"},
 					"reports": []map[string]any{{"period_end": "2023-12-31", "fiscal_year": 2023, "fiscal_quarter": nil, "published_at": "2024-04-30", "income": map[string]any{"revenue": "1600.00", "gross_profit": "656.00", "operating_profit": "421.60", "net_profit": "272.00"}, "balance": map[string]any{"cash_and_equivalents": "283.50", "accounts_receivable": "202.50", "inventory": "243.00", "current_assets": "810.00", "current_liabilities": "320.00", "total_assets": "2080.00", "total_liabilities": "936.00", "total_equity": "1144.00"}, "cash_flow": map[string]any{"operating_cash_flow": "345.00", "capital_expenditure": "105.00", "investing_cash_flow": "-75.90", "financing_cash_flow": "-34.50", "net_cash_change": "234.60"}, "indicators": map[string]any{"revenue_yoy_pct": "11.11", "net_profit_yoy_pct": "14.48", "gross_margin_pct": "41.00", "roe_pct": "23.78", "free_cash_flow": "240.00", "debt_to_asset_pct": "45.00", "current_ratio": "2.53"}}},
-					"source":  map[string]any{"mode": "demo", "provider": "mysql-demo-fixture", "seed_version": "fnd-003-demo-v7", "as_of": "2024-06-28"},
+					"source":  map[string]any{"mode": "demo", "provider": "mysql-demo-fixture", "seed_version": "fnd-003-demo-v8", "as_of": "2024-06-28"},
 				},
 			},
 		},
@@ -320,7 +371,7 @@ func stockBarsResponse() map[string]any {
 					"effective_range": map[string]any{"from": "2024-06-27", "to": "2024-06-28"},
 					"bars":            []map[string]any{{"trade_date": "2024-06-27", "open": "10.12", "high": "10.28", "low": "10.05", "close": "10.22", "volume": int64(78210000), "ma5": nil, "ma20": nil}},
 					"benchmark":       nil,
-					"source":          map[string]any{"mode": "demo", "provider": "mysql-demo-fixture", "seed_version": "fnd-003-demo-v7"},
+					"source":          map[string]any{"mode": "demo", "provider": "mysql-demo-fixture", "seed_version": "fnd-003-demo-v8"},
 				},
 			},
 		},
@@ -341,47 +392,58 @@ func jsonReferenceResponse(description, reference string) map[string]any {
 func apiComponents() map[string]any {
 	return map[string]any{
 		"schemas": map[string]any{
-			"Response":                 responseSchema(),
-			"ErrorResponse":            errorSchema(),
-			"PaginationRequest":        paginationRequestSchema(),
-			"PaginationMeta":           paginationMetaSchema(),
-			"PaginatedResponse":        paginatedResponseSchema(),
-			"HealthResponse":           healthSchema(),
-			"DemoCounts":               demoCountsSchema(),
-			"DemoSampleStock":          demoSampleStockSchema(),
-			"DemoStatus":               demoStatusSchema(),
-			"MarketOverview":           marketOverviewSchema(),
-			"MarketSectors":            marketSectorsSchema(),
-			"MarketSector":             marketSectorSchema(),
-			"SectorLeader":             sectorLeaderSchema(),
-			"MarketDataSource":         marketDataSourceSchema(),
-			"MarketIndex":              marketIndexSchema(),
-			"MarketBreadth":            marketBreadthSchema(),
-			"MarketTurnover":           marketTurnoverSchema(),
-			"MarketSignals":            marketSignalsSchema(),
-			"SignalParameters":         signalParametersSchema(),
-			"SignalResult":             signalResultSchema(),
-			"MarketRankings":           marketRankingsSchema(),
-			"MarketRanking":            marketRankingSchema(),
-			"StockOverview":            stockOverviewSchema(),
-			"StockQuote":               stockQuoteSchema(),
-			"StockMetrics":             stockMetricsSchema(),
-			"StockMetric":              stockMetricSchema(),
-			"StockSparkline":           stockSparklineSchema(),
-			"StockSparklinePoint":      stockSparklinePointSchema(),
-			"StockBars":                stockBarsSchema(),
-			"StockBar":                 stockBarSchema(),
-			"StockEffectiveRange":      stockEffectiveRangeSchema(),
-			"StockBenchmark":           stockBenchmarkSchema(),
-			"StockBenchmarkPoint":      stockBenchmarkPointSchema(),
-			"StockFinancials":          stockFinancialsSchema(),
-			"StockFinancialSummary":    stockFinancialSummarySchema(),
-			"StockFinancialReport":     stockFinancialReportSchema(),
-			"StockFinancialIncome":     stockFinancialIncomeSchema(),
-			"StockFinancialBalance":    stockFinancialBalanceSchema(),
-			"StockFinancialCashFlow":   stockFinancialCashFlowSchema(),
-			"StockFinancialIndicators": stockFinancialIndicatorsSchema(),
-			"StockFinancialSource":     stockFinancialSourceSchema(),
+			"Response":                       responseSchema(),
+			"ErrorResponse":                  errorSchema(),
+			"PaginationRequest":              paginationRequestSchema(),
+			"PaginationMeta":                 paginationMetaSchema(),
+			"PaginatedResponse":              paginatedResponseSchema(),
+			"HealthResponse":                 healthSchema(),
+			"DemoCounts":                     demoCountsSchema(),
+			"DemoSampleStock":                demoSampleStockSchema(),
+			"DemoStatus":                     demoStatusSchema(),
+			"MarketOverview":                 marketOverviewSchema(),
+			"MarketSectors":                  marketSectorsSchema(),
+			"MarketSector":                   marketSectorSchema(),
+			"SectorLeader":                   sectorLeaderSchema(),
+			"MarketDataSource":               marketDataSourceSchema(),
+			"MarketIndex":                    marketIndexSchema(),
+			"MarketBreadth":                  marketBreadthSchema(),
+			"MarketTurnover":                 marketTurnoverSchema(),
+			"MarketSignals":                  marketSignalsSchema(),
+			"SignalParameters":               signalParametersSchema(),
+			"SignalResult":                   signalResultSchema(),
+			"MarketRankings":                 marketRankingsSchema(),
+			"MarketRanking":                  marketRankingSchema(),
+			"StockOverview":                  stockOverviewSchema(),
+			"StockQuote":                     stockQuoteSchema(),
+			"StockMetrics":                   stockMetricsSchema(),
+			"StockMetric":                    stockMetricSchema(),
+			"StockSparkline":                 stockSparklineSchema(),
+			"StockSparklinePoint":            stockSparklinePointSchema(),
+			"StockBars":                      stockBarsSchema(),
+			"StockBar":                       stockBarSchema(),
+			"StockEffectiveRange":            stockEffectiveRangeSchema(),
+			"StockBenchmark":                 stockBenchmarkSchema(),
+			"StockBenchmarkPoint":            stockBenchmarkPointSchema(),
+			"StockFinancials":                stockFinancialsSchema(),
+			"StockFinancialSummary":          stockFinancialSummarySchema(),
+			"StockFinancialReport":           stockFinancialReportSchema(),
+			"StockFinancialIncome":           stockFinancialIncomeSchema(),
+			"StockFinancialBalance":          stockFinancialBalanceSchema(),
+			"StockFinancialCashFlow":         stockFinancialCashFlowSchema(),
+			"StockFinancialIndicators":       stockFinancialIndicatorsSchema(),
+			"StockFinancialSource":           stockFinancialSourceSchema(),
+			"StockValuation":                 stockValuationSchema(),
+			"StockValuationMetrics":          stockValuationMetricsSchema(),
+			"StockValuationMetric":           stockValuationMetricSchema(),
+			"StockValuationCurrent":          stockValuationCurrentSchema(),
+			"StockValuationPoint":            stockValuationPointSchema(),
+			"StockValuationPercentile":       stockValuationPercentileSchema(),
+			"StockIndustry":                  stockIndustrySchema(),
+			"StockIndustryComparison":        stockIndustryComparisonSchema(),
+			"StockIndustryComparisonMetrics": stockIndustryComparisonMetricsSchema(),
+			"StockIndustryMetric":            stockIndustryMetricSchema(),
+			"StockValuationSource":           stockValuationSourceSchema(),
 		},
 	}
 }
@@ -555,6 +617,144 @@ func stockFinancialsSchema() map[string]any {
 	}
 }
 
+func stockValuationSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"symbol", "name", "requested_range", "effective_range", "as_of", "metrics", "industry_comparisons", "source"},
+		"properties": map[string]any{
+			"symbol":               map[string]any{"type": "string", "example": "000001.SZ"},
+			"name":                 map[string]any{"type": "string", "example": "平安银行"},
+			"requested_range":      map[string]any{"type": "string", "enum": []string{"3y", "5y"}},
+			"effective_range":      map[string]any{"$ref": "#/components/schemas/StockEffectiveRange"},
+			"as_of":                map[string]any{"type": "string", "format": "date", "nullable": true},
+			"metrics":              map[string]any{"$ref": "#/components/schemas/StockValuationMetrics"},
+			"industry_comparisons": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/StockIndustryComparison"}},
+			"source":               map[string]any{"$ref": "#/components/schemas/StockValuationSource"},
+		},
+	}
+}
+
+func stockValuationMetricsSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"pe_ttm", "pb", "ps_ttm"},
+		"properties": map[string]any{
+			"pe_ttm": map[string]any{"$ref": "#/components/schemas/StockValuationMetric"},
+			"pb":     map[string]any{"$ref": "#/components/schemas/StockValuationMetric"},
+			"ps_ttm": map[string]any{"$ref": "#/components/schemas/StockValuationMetric"},
+		},
+	}
+}
+
+func stockValuationMetricSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"current", "history", "percentile", "position"},
+		"properties": map[string]any{
+			"current":    map[string]any{"$ref": "#/components/schemas/StockValuationCurrent"},
+			"history":    map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/StockValuationPoint"}},
+			"percentile": map[string]any{"$ref": "#/components/schemas/StockValuationPercentile"},
+			"position":   map[string]any{"type": "string", "nullable": true, "enum": []string{"low", "middle", "high"}},
+		},
+	}
+}
+
+func stockValuationCurrentSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"value", "as_of", "basis"},
+		"properties": map[string]any{
+			"value": map[string]any{"type": "string", "nullable": true, "example": "7.40"},
+			"as_of": map[string]any{"type": "string", "format": "date", "nullable": true, "example": "2024-06-28"},
+			"basis": map[string]any{"type": "string", "nullable": true, "enum": []string{"ttm", "latest_daily_basic"}},
+		},
+	}
+}
+
+func stockValuationPointSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"as_of", "value"},
+		"properties": map[string]any{
+			"as_of": map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
+			"value": map[string]any{"type": "string", "example": "7.40"},
+		},
+	}
+}
+
+func stockValuationPercentileSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"value", "sample_size", "range_from", "range_to", "method"},
+		"properties": map[string]any{
+			"value":       map[string]any{"type": "string", "nullable": true, "example": "66.67"},
+			"sample_size": map[string]any{"type": "integer", "minimum": 0},
+			"range_from":  map[string]any{"type": "string", "format": "date", "nullable": true},
+			"range_to":    map[string]any{"type": "string", "format": "date", "nullable": true},
+			"method":      map[string]any{"type": "string", "enum": []string{"inclusive_rank"}},
+		},
+	}
+}
+
+func stockIndustryComparisonSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"industry", "as_of", "metrics"},
+		"properties": map[string]any{
+			"industry": map[string]any{"$ref": "#/components/schemas/StockIndustry"},
+			"as_of":    map[string]any{"type": "string", "format": "date", "nullable": true},
+			"metrics":  map[string]any{"$ref": "#/components/schemas/StockIndustryComparisonMetrics"},
+		},
+	}
+}
+
+func stockIndustrySchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"code", "name"},
+		"properties": map[string]any{
+			"code": map[string]any{"type": "string", "example": "BANK"},
+			"name": map[string]any{"type": "string", "example": "银行"},
+		},
+	}
+}
+
+func stockIndustryComparisonMetricsSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"pe_ttm", "pb", "ps_ttm"},
+		"properties": map[string]any{
+			"pe_ttm": map[string]any{"$ref": "#/components/schemas/StockIndustryMetric"},
+			"pb":     map[string]any{"$ref": "#/components/schemas/StockIndustryMetric"},
+			"ps_ttm": map[string]any{"$ref": "#/components/schemas/StockIndustryMetric"},
+		},
+	}
+}
+
+func stockIndustryMetricSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"value", "sample_size"},
+		"properties": map[string]any{
+			"value":       map[string]any{"type": "string", "nullable": true, "example": "6.00"},
+			"sample_size": map[string]any{"type": "integer", "minimum": 0},
+		},
+	}
+}
+
+func stockValuationSourceSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"mode", "provider", "seed_version", "as_of"},
+		"properties": map[string]any{
+			"mode":         map[string]any{"type": "string", "enum": []string{"demo", "real", "fallback"}},
+			"provider":     map[string]any{"type": "string", "enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"}},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v8"},
+			"as_of":        map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
+		},
+	}
+}
+
 func stockFinancialSummarySchema() map[string]any {
 	return map[string]any{
 		"type":     "object",
@@ -660,7 +860,7 @@ func stockFinancialSourceSchema() map[string]any {
 		"properties": map[string]any{
 			"mode":         map[string]any{"type": "string", "enum": []string{"demo", "real", "fallback"}},
 			"provider":     map[string]any{"type": "string", "enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"}},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v7"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v8"},
 			"as_of":        map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
 		},
 	}
@@ -770,14 +970,15 @@ func healthSchema() map[string]any {
 func demoCountsSchema() map[string]any {
 	return map[string]any{
 		"type":     "object",
-		"required": []string{"instruments", "daily_bars", "daily_basics", "financial_metrics", "financial_reports", "index_snapshots"},
+		"required": []string{"instruments", "daily_bars", "daily_basics", "financial_metrics", "financial_reports", "valuation_snapshots", "index_snapshots"},
 		"properties": map[string]any{
-			"instruments":       map[string]any{"type": "integer", "format": "int64", "minimum": 0},
-			"daily_bars":        map[string]any{"type": "integer", "format": "int64", "minimum": 0},
-			"daily_basics":      map[string]any{"type": "integer", "format": "int64", "minimum": 0},
-			"financial_metrics": map[string]any{"type": "integer", "format": "int64", "minimum": 0},
-			"financial_reports": map[string]any{"type": "integer", "format": "int64", "minimum": 0},
-			"index_snapshots":   map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"instruments":         map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"daily_bars":          map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"daily_basics":        map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"financial_metrics":   map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"financial_reports":   map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"valuation_snapshots": map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"index_snapshots":     map[string]any{"type": "integer", "format": "int64", "minimum": 0},
 		},
 	}
 }
@@ -808,7 +1009,7 @@ func demoStatusSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
 			},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v7"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v8"},
 			"as_of":        map[string]any{"type": "string", "format": "date", "nullable": true, "example": "2024-06-28"},
 			"counts":       map[string]any{"$ref": "#/components/schemas/DemoCounts"},
 			"sample_stocks": map[string]any{
@@ -888,7 +1089,7 @@ func marketDataSourceSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
 			},
-			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v7"},
+			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v8"},
 		},
 	}
 }

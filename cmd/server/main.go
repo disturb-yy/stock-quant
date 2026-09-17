@@ -113,12 +113,22 @@ func run(ctx context.Context) error {
 		applicationLogger.Error("initialize stock financials service", "error", err)
 		return err
 	}
+	valuationReader, err := stockinfrastructure.NewMySQLValuationReader(database)
+	if err != nil {
+		applicationLogger.Error("initialize stock valuation reader", "error", err)
+		return err
+	}
+	valuationService, err := stock.NewValuationService(valuationReader, stock.ValuationSource{Mode: string(providerSelection.Mode), Provider: providerSelection.Provider})
+	if err != nil {
+		applicationLogger.Error("initialize stock valuation service", "error", err)
+		return err
+	}
 	barsService, err := market.NewBarsService(overviewReader, providerSelection)
 	if err != nil {
 		applicationLogger.Error("initialize stock bars service", "error", err)
 		return err
 	}
-	server := newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancials(applicationLogger, httpAddress, overviewService, sectorService, signalService, rankingService, stockService, barsService, financialsService, statusReader)
+	server := newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuation(applicationLogger, httpAddress, overviewService, sectorService, signalService, rankingService, stockService, barsService, financialsService, valuationService, statusReader)
 	applicationLogger.Info("HTTP server starting", "address", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		applicationLogger.Error("HTTP server stopped", "error", err)

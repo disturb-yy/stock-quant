@@ -241,6 +241,7 @@ func (store *Store) Migrate(ctx context.Context) error {
 		stockOverviewSchemaMigration{db: store.db},
 		stockBarsSchemaMigration{db: store.db},
 		stockFinancialsSchemaMigration{db: store.db},
+		stockValuationSchemaMigration{db: store.db},
 	)
 	if err != nil {
 		return fmt.Errorf("create demo migration runner: %w", err)
@@ -475,6 +476,9 @@ func (store *Store) SeedDemo(ctx context.Context, fixture demo.Fixture) error {
 	if err := seedFinancialReports(ctx, tx, fixture); err != nil {
 		return err
 	}
+	if err := seedValuationSnapshots(ctx, tx, fixture); err != nil {
+		return err
+	}
 	if err := seedMetadata(ctx, tx, fixture); err != nil {
 		return err
 	}
@@ -684,6 +688,9 @@ func (store *Store) ReadDemoSnapshot(ctx context.Context) (demo.StoreSnapshot, e
 	}
 	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM stock_financial_reports`).Scan(&snapshot.Counts.FinancialReports); err != nil {
 		return demo.StoreSnapshot{}, fmt.Errorf("count financial reports: %w", err)
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM stock_valuation_snapshots`).Scan(&snapshot.Counts.ValuationSnapshots); err != nil {
+		return demo.StoreSnapshot{}, fmt.Errorf("count valuation snapshots: %w", err)
 	}
 	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM index_snapshots`).Scan(&snapshot.Counts.IndexSnapshots); err != nil {
 		return demo.StoreSnapshot{}, fmt.Errorf("count index snapshots: %w", err)

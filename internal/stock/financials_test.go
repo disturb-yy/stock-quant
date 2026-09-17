@@ -20,7 +20,7 @@ func (reader *fakeFinancialsReader) ReadStockFinancials(_ context.Context, reque
 
 func TestFinancialsServiceDefaultsAndBuildsLatestSummary(t *testing.T) {
 	reader := &fakeFinancialsReader{snapshot: FinancialsSnapshot{
-		Symbol: "000001.SZ", Name: "平安银行", SeedVersion: "fnd-003-demo-v7", AsOf: "2024-06-28",
+		Symbol: "000001.SZ", Name: "平安银行", SeedVersion: "fnd-003-demo-v8", AsOf: "2024-06-28",
 		Reports: []stockdomain.FinancialReport{
 			financialReport("2023-12-31", 2023, "1000", "400", "200", "100", "500", "250", "1000", "400", "600", "160", "50"),
 			financialReport("2024-12-31", 2024, "1250", "500", "250", "120", "600", "300", "1200", "480", "720", "200", "80"),
@@ -53,7 +53,7 @@ func TestFinancialsServiceDefaultsAndBuildsLatestSummary(t *testing.T) {
 	if result.Summary.FreeCashFlow == nil || *result.Summary.FreeCashFlow != "120.00" || result.Summary.CurrentRatio == nil || *result.Summary.CurrentRatio != "2.00" {
 		t.Fatalf("summary cash/quality = %#v, want 120.00/2.00", result.Summary)
 	}
-	if result.Source.AsOf != "2024-06-28" || result.Source.SeedVersion != "fnd-003-demo-v7" {
+	if result.Source.AsOf != "2024-06-28" || result.Source.SeedVersion != "fnd-003-demo-v8" {
 		t.Fatalf("source = %#v, want snapshot provenance", result.Source)
 	}
 }
