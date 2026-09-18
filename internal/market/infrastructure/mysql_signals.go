@@ -60,6 +60,7 @@ func (reader *MySQLOverviewReader) readSignalSeries(ctx context.Context, window 
 
 	seriesByCode := make(map[string]*marketdomain.SignalSeries)
 	order := make([]string, 0)
+	latestTradeDate := ""
 	for rows.Next() {
 		var code, name string
 		var bar marketdomain.DailyBar
@@ -67,6 +68,9 @@ func (reader *MySQLOverviewReader) readSignalSeries(ctx context.Context, window 
 			return nil, fmt.Errorf("scan market signal daily bar: %w", err)
 		}
 		bar.InstrumentCode = code
+		if bar.TradeDate > latestTradeDate {
+			latestTradeDate = bar.TradeDate
+		}
 		series, ok := seriesByCode[code]
 		if !ok {
 			series = &marketdomain.SignalSeries{InstrumentCode: code, InstrumentName: name, Bars: make([]marketdomain.DailyBar, 0, window+1)}
@@ -80,7 +84,11 @@ func (reader *MySQLOverviewReader) readSignalSeries(ctx context.Context, window 
 	}
 	series := make([]marketdomain.SignalSeries, 0, len(order))
 	for _, code := range order {
-		series = append(series, *seriesByCode[code])
+		item := *seriesByCode[code]
+		// 停牌、刚上市股票可能没有完整窗口；跳过它们，避免一只股票阻断全市场扫描。
+		if len(item.Bars) >= window+1 && item.Bars[len(item.Bars)-1].TradeDate == latestTradeDate {
+			series = append(series, item)
+		}
 	}
 	return series, nil
 }

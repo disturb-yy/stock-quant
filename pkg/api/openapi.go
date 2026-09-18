@@ -790,7 +790,7 @@ func stockValuationSourceSchema() map[string]any {
 		"required": []string{"mode", "provider", "seed_version", "as_of"},
 		"properties": map[string]any{
 			"mode":         map[string]any{"type": "string", "enum": []string{"demo", "real", "fallback"}},
-			"provider":     map[string]any{"type": "string", "enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"}},
+			"provider":     map[string]any{"type": "string", "enum": []string{"mysql-demo-fixture", "tushare", "external-real-provider", "local-fixture-fallback"}},
 			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v8"},
 			"as_of":        map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
 		},
@@ -901,7 +901,7 @@ func stockFinancialSourceSchema() map[string]any {
 		"required": []string{"mode", "provider", "seed_version", "as_of"},
 		"properties": map[string]any{
 			"mode":         map[string]any{"type": "string", "enum": []string{"demo", "real", "fallback"}},
-			"provider":     map[string]any{"type": "string", "enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"}},
+			"provider":     map[string]any{"type": "string", "enum": []string{"mysql-demo-fixture", "tushare", "external-real-provider", "local-fixture-fallback"}},
 			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v8"},
 			"as_of":        map[string]any{"type": "string", "format": "date", "example": "2024-06-28"},
 		},
@@ -1199,7 +1199,7 @@ func demoStatusSchema() map[string]any {
 			},
 			"provider": map[string]any{
 				"type": "string",
-				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
+				"enum": []string{"mysql-demo-fixture", "tushare", "external-real-provider", "local-fixture-fallback"},
 			},
 			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v8"},
 			"as_of":        map[string]any{"type": "string", "format": "date", "nullable": true, "example": "2024-06-28"},
@@ -1279,7 +1279,7 @@ func marketDataSourceSchema() map[string]any {
 			},
 			"provider": map[string]any{
 				"type": "string",
-				"enum": []string{"mysql-demo-fixture", "external-real-provider", "local-fixture-fallback"},
+				"enum": []string{"mysql-demo-fixture", "tushare", "external-real-provider", "local-fixture-fallback"},
 			},
 			"seed_version": map[string]any{"type": "string", "example": "fnd-003-demo-v8"},
 		},

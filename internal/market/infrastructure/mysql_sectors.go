@@ -51,10 +51,10 @@ func (reader *MySQLOverviewReader) readSectorComponents(ctx context.Context) ([]
 		  ON instruments.code = memberships.instrument_code
 		CROSS JOIN latest_trade
 		CROSS JOIN previous_trade
-		LEFT JOIN daily_bars AS current_bar
+		INNER JOIN daily_bars AS current_bar
 		  ON current_bar.instrument_code = instruments.code
 		 AND current_bar.trade_date = latest_trade.trade_date
-		LEFT JOIN daily_bars AS previous_bar
+		INNER JOIN daily_bars AS previous_bar
 		  ON previous_bar.instrument_code = instruments.code
 		 AND previous_bar.trade_date = previous_trade.trade_date
 		ORDER BY sectors.code, instruments.code`)

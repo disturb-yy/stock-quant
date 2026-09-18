@@ -47,7 +47,7 @@ func (reader *MySQLOverviewReader) readRankingObservations(ctx context.Context) 
 		  ON current_bar.instrument_code = instruments.code
 		 AND current_bar.trade_date = latest_trade.trade_date
 		CROSS JOIN previous_trade
-		LEFT JOIN daily_bars AS previous_bar
+		INNER JOIN daily_bars AS previous_bar
 		  ON previous_bar.instrument_code = instruments.code
 		 AND previous_bar.trade_date = previous_trade.trade_date
 		LEFT JOIN financial_metrics AS turnover_rate

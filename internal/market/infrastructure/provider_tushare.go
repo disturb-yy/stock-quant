@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/disturb-yy/stock-quant/pkg/config"
@@ -28,6 +29,10 @@ const (
 	tushareDailyBasicFields = "ts_code,trade_date,turnover_rate,pe_ttm,pb,ps_ttm,total_mv"
 	tushareFactorFields     = "ts_code,trade_date,adj_factor"
 	tushareIndexFields      = "ts_code,trade_date,close,change,pct_chg"
+	// Tushare 单接口限制为 200 次/分钟；4 个 worker 可提升吞吐并保持在配额内。
+	tushareSyncWorkerCount = 4
+	tushareWriteChunkSize  = 500
+	tushareRequestInterval = 310 * time.Millisecond
 )
 
 var tushareIndexNames = map[string]string{
@@ -44,9 +49,11 @@ type TushareQueryClient interface {
 
 // TushareClient 调用 Tushare Pro 的 REST API。
 type TushareClient struct {
-	endpoint   string
-	token      string
-	httpClient interface {
+	endpoint    string
+	token       string
+	rateMu      sync.Mutex
+	nextRequest time.Time
+	httpClient  interface {
 		Do(*http.Request) (*http.Response, error)
 	}
 }
@@ -97,6 +104,9 @@ func (client *TushareClient) Query(ctx context.Context, apiName string, params m
 	if strings.TrimSpace(apiName) == "" {
 		return nil, errors.New("Tushare API name is required")
 	}
+	if err := client.waitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("wait for Tushare request: %w", err)
+	}
 	payload, err := json.Marshal(map[string]any{"api_name": apiName, "token": client.token, "params": params, "fields": fields})
 	if err != nil {
 		return nil, fmt.Errorf("encode Tushare request: %w", err)
@@ -127,6 +137,28 @@ func (client *TushareClient) Query(ctx context.Context, apiName string, params m
 		return []map[string]string{}, nil
 	}
 	return mapTushareRows(decoded.Data.Fields, decoded.Data.Items)
+}
+
+func (client *TushareClient) waitForRateLimit(ctx context.Context) error {
+	client.rateMu.Lock()
+	now := time.Now()
+	wait := time.Until(client.nextRequest)
+	if wait < 0 {
+		wait = 0
+	}
+	client.nextRequest = now.Add(wait + tushareRequestInterval)
+	client.rateMu.Unlock()
+	if wait == 0 {
+		return nil
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func mapTushareRows(fields []string, items [][]any) ([]map[string]string, error) {
@@ -254,6 +286,7 @@ func (syncer *TushareSyncer) Sync(ctx context.Context, options TushareSyncOption
 	if err := syncer.fetchDays(ctx, dates, &batch); err != nil {
 		return TushareSyncSummary{}, err
 	}
+	filterTushareBatchToInstruments(&batch)
 	if err := validateTushareBatch(batch); err != nil {
 		return TushareSyncSummary{}, err
 	}
@@ -422,11 +455,100 @@ type tushareDay struct {
 	Factors []tushareFactor
 }
 
+func filterTushareBatchToInstruments(batch *tushareBatch) {
+	allowed := make(map[string]struct{}, len(batch.Instruments))
+	for _, instrument := range batch.Instruments {
+		allowed[instrument.Code] = struct{}{}
+	}
+	batch.Bars = filterTushareBars(batch.Bars, allowed)
+	batch.Basics = filterTushareBasics(batch.Basics, allowed)
+	batch.Factors = filterTushareFactors(batch.Factors, allowed)
+}
+
+func filterTushareBars(items []tushareBar, allowed map[string]struct{}) []tushareBar {
+	filtered := items[:0]
+	for _, item := range items {
+		if _, ok := allowed[item.Code]; ok {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func filterTushareBasics(items []tushareBasic, allowed map[string]struct{}) []tushareBasic {
+	filtered := items[:0]
+	for _, item := range items {
+		if _, ok := allowed[item.Code]; ok {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func filterTushareFactors(items []tushareFactor, allowed map[string]struct{}) []tushareFactor {
+	filtered := items[:0]
+	for _, item := range items {
+		if _, ok := allowed[item.Code]; ok {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+type tushareDayResult struct {
+	date string
+	day  tushareDay
+	err  error
+}
+
 func (syncer *TushareSyncer) fetchDays(ctx context.Context, dates []string, batch *tushareBatch) error {
+	if len(dates) == 0 {
+		return nil
+	}
+	workerCount := tushareSyncWorkerCount
+	if len(dates) < workerCount {
+		workerCount = len(dates)
+	}
+	jobs := make(chan string, len(dates))
+	results := make(chan tushareDayResult, len(dates))
 	for _, date := range dates {
+		jobs <- date
+	}
+	close(jobs)
+
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for index := 0; index < workerCount; index++ {
+		go syncer.fetchDayWorker(ctx, jobs, results, &workers)
+	}
+	workers.Wait()
+	close(results)
+	return collectTushareDays(dates, results, batch)
+}
+
+func (syncer *TushareSyncer) fetchDayWorker(ctx context.Context, jobs <-chan string, results chan<- tushareDayResult, workers *sync.WaitGroup) {
+	defer workers.Done()
+	for date := range jobs {
 		day, err := syncer.fetchDay(ctx, date)
+		results <- tushareDayResult{date: date, day: day, err: err}
 		if err != nil {
-			return err
+			return
+		}
+	}
+}
+
+func collectTushareDays(dates []string, results <-chan tushareDayResult, batch *tushareBatch) error {
+	days := make(map[string]tushareDay, len(dates))
+	for result := range results {
+		if result.err != nil {
+			return result.err
+		}
+		days[result.date] = result.day
+	}
+	for _, date := range dates {
+		day, ok := days[date]
+		if !ok {
+			return fmt.Errorf("Tushare sync did not return data for %s", date)
 		}
 		batch.Bars = append(batch.Bars, day.Bars...)
 		batch.Basics = append(batch.Basics, day.Basics...)
@@ -629,17 +751,20 @@ func (syncer *TushareSyncer) writeBatch(ctx context.Context, batch tushareBatch,
 }
 
 func writeTushareInstruments(ctx context.Context, tx *sql.Tx, instruments []tushareInstrument, asOf string) error {
-	for _, instrument := range instruments {
-		listDate := instrument.ListDate
-		if listDate == "" {
-			listDate = asOf
+	const prefix = `INSERT INTO instruments (code, name, exchange, status, as_of) VALUES `
+	const suffix = ` ON DUPLICATE KEY UPDATE name = VALUES(name), exchange = VALUES(exchange), status = VALUES(status), as_of = VALUES(as_of)`
+	for offset := 0; offset < len(instruments); offset += tushareWriteChunkSize {
+		end := minTushareIndex(offset+tushareWriteChunkSize, len(instruments))
+		args := make([]any, 0, (end-offset)*5)
+		for _, instrument := range instruments[offset:end] {
+			listDate := instrument.ListDate
+			if listDate == "" {
+				listDate = asOf
+			}
+			args = append(args, instrument.Code, instrument.Name, instrument.Exchange, instrument.Status, listDate)
 		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO instruments (code, name, exchange, status, as_of)
-			VALUES (?, ?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE name = VALUES(name), exchange = VALUES(exchange), status = VALUES(status), as_of = VALUES(as_of)`,
-			instrument.Code, instrument.Name, instrument.Exchange, instrument.Status, listDate); err != nil {
-			return fmt.Errorf("upsert Tushare instrument %q: %w", instrument.Code, err)
+		if err := executeTushareChunk(ctx, tx, prefix, suffix, end-offset, 5, args, "upsert Tushare instruments"); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -672,67 +797,76 @@ func tushareIndustryCode(industry string) string {
 }
 
 func writeTushareBars(ctx context.Context, tx *sql.Tx, bars []tushareBar) error {
-	for _, bar := range bars {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO daily_bars (instrument_code, trade_date, open_price, high_price, low_price, close_price, volume, turnover_amount)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE open_price = VALUES(open_price), high_price = VALUES(high_price), low_price = VALUES(low_price), close_price = VALUES(close_price), volume = VALUES(volume), turnover_amount = VALUES(turnover_amount)`,
-			bar.Code, bar.TradeDate, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.TurnoverAmount); err != nil {
-			return fmt.Errorf("upsert Tushare daily bar %q/%q: %w", bar.Code, bar.TradeDate, err)
+	const prefix = `INSERT INTO daily_bars (instrument_code, trade_date, open_price, high_price, low_price, close_price, volume, turnover_amount) VALUES `
+	const suffix = ` ON DUPLICATE KEY UPDATE open_price = VALUES(open_price), high_price = VALUES(high_price), low_price = VALUES(low_price), close_price = VALUES(close_price), volume = VALUES(volume), turnover_amount = VALUES(turnover_amount)`
+	for offset := 0; offset < len(bars); offset += tushareWriteChunkSize {
+		end := minTushareIndex(offset+tushareWriteChunkSize, len(bars))
+		args := make([]any, 0, (end-offset)*8)
+		for _, bar := range bars[offset:end] {
+			args = append(args, bar.Code, bar.TradeDate, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.TurnoverAmount)
+		}
+		if err := executeTushareChunk(ctx, tx, prefix, suffix, end-offset, 8, args, "upsert Tushare daily bars"); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
 func writeTushareBasics(ctx context.Context, tx *sql.Tx, basics []tushareBasic, version string) error {
-	for _, basic := range basics {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO daily_basic (instrument_code, trade_date, market_cap, pb)
-			VALUES (?, ?, NULLIF(?, ''), NULLIF(?, ''))
-			ON DUPLICATE KEY UPDATE market_cap = VALUES(market_cap), pb = VALUES(pb)`,
-			basic.Code, basic.TradeDate, basic.MarketCap, basic.PB); err != nil {
-			return fmt.Errorf("upsert Tushare daily basic %q/%q: %w", basic.Code, basic.TradeDate, err)
+	if err := writeTushareDailyBasics(ctx, tx, basics); err != nil {
+		return err
+	}
+	if err := writeTushareMetricRows(ctx, tx, basics); err != nil {
+		return err
+	}
+	return writeTushareValuationRows(ctx, tx, basics, version)
+}
+
+func writeTushareDailyBasics(ctx context.Context, tx *sql.Tx, basics []tushareBasic) error {
+	const prefix = `INSERT INTO daily_basic (instrument_code, trade_date, market_cap, pb) VALUES `
+	const suffix = ` ON DUPLICATE KEY UPDATE market_cap = VALUES(market_cap), pb = VALUES(pb)`
+	for offset := 0; offset < len(basics); offset += tushareWriteChunkSize {
+		end := minTushareIndex(offset+tushareWriteChunkSize, len(basics))
+		args := make([]any, 0, (end-offset)*4)
+		for _, basic := range basics[offset:end] {
+			args = append(args, basic.Code, basic.TradeDate, nullableTushareValue(basic.MarketCap), nullableTushareValue(basic.PB))
 		}
-		if err := writeTushareMetrics(ctx, tx, basic); err != nil {
+		if err := executeTushareChunk(ctx, tx, prefix, suffix, end-offset, 4, args, "upsert Tushare daily basics"); err != nil {
 			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO stock_valuation_snapshots (
-				instrument_code, trade_date, pe_ttm, pe_ttm_basis, pb, pb_basis, ps_ttm, ps_ttm_basis,
-				provider, seed_version, as_of
-			) VALUES (?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?)
-			ON DUPLICATE KEY UPDATE pe_ttm = VALUES(pe_ttm), pe_ttm_basis = VALUES(pe_ttm_basis), pb = VALUES(pb), pb_basis = VALUES(pb_basis), ps_ttm = VALUES(ps_ttm), ps_ttm_basis = VALUES(ps_ttm_basis), provider = VALUES(provider), seed_version = VALUES(seed_version), as_of = VALUES(as_of)`,
-			basic.Code, basic.TradeDate, basic.PETTM, tushareProviderName+".daily_basic", basic.PB, tushareProviderName+".daily_basic", basic.PSTTM, tushareProviderName+".daily_basic", tushareProviderName, version, basic.TradeDate); err != nil {
-			return fmt.Errorf("upsert Tushare valuation %q/%q: %w", basic.Code, basic.TradeDate, err)
 		}
 	}
 	return nil
 }
 
-func writeTushareMetrics(ctx context.Context, tx *sql.Tx, basic tushareBasic) error {
-	metrics := []struct {
-		name, value string
-	}{
-		{name: "pe_ttm", value: basic.PETTM},
-		{name: "turnover_rate", value: basic.TurnoverRate},
-	}
-	for _, metric := range metrics {
-		if metric.value == "" {
-			continue
+func writeTushareMetricRows(ctx context.Context, tx *sql.Tx, basics []tushareBasic) error {
+	rows := make([][]any, 0, len(basics)*2)
+	for _, basic := range basics {
+		if basic.PETTM != "" {
+			rows = append(rows, []any{basic.Code, basic.TradeDate, "pe_ttm", tushareProviderName + ".daily_basic", basic.PETTM})
 		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO financial_metrics (instrument_code, metric_date, metric_name, basis, metric_value)
-			VALUES (?, ?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE basis = VALUES(basis), metric_value = VALUES(metric_value)`,
-			basic.Code, basic.TradeDate, metric.name, tushareProviderName+".daily_basic", metric.value); err != nil {
-			return fmt.Errorf("upsert Tushare metric %q/%q/%q: %w", basic.Code, basic.TradeDate, metric.name, err)
+		if basic.TurnoverRate != "" {
+			rows = append(rows, []any{basic.Code, basic.TradeDate, "turnover_rate", tushareProviderName + ".daily_basic", basic.TurnoverRate})
 		}
 	}
-	return nil
+	const prefix = `INSERT INTO financial_metrics (instrument_code, metric_date, metric_name, basis, metric_value) VALUES `
+	const suffix = ` ON DUPLICATE KEY UPDATE basis = VALUES(basis), metric_value = VALUES(metric_value)`
+	return writeTushareRows(ctx, tx, prefix, suffix, rows, 5, "upsert Tushare financial metrics")
+}
+
+func writeTushareValuationRows(ctx context.Context, tx *sql.Tx, basics []tushareBasic, version string) error {
+	rows := make([][]any, 0, len(basics))
+	for _, basic := range basics {
+		basis := tushareProviderName + ".daily_basic"
+		rows = append(rows, []any{basic.Code, basic.TradeDate, nullableTushareValue(basic.PETTM), basis, nullableTushareValue(basic.PB), basis, nullableTushareValue(basic.PSTTM), basis, tushareProviderName, version, basic.TradeDate})
+	}
+	const prefix = `INSERT INTO stock_valuation_snapshots (instrument_code, trade_date, pe_ttm, pe_ttm_basis, pb, pb_basis, ps_ttm, ps_ttm_basis, provider, seed_version, as_of) VALUES `
+	const suffix = ` ON DUPLICATE KEY UPDATE pe_ttm = VALUES(pe_ttm), pe_ttm_basis = VALUES(pe_ttm_basis), pb = VALUES(pb), pb_basis = VALUES(pb_basis), ps_ttm = VALUES(ps_ttm), ps_ttm_basis = VALUES(ps_ttm_basis), provider = VALUES(provider), seed_version = VALUES(seed_version), as_of = VALUES(as_of)`
+	return writeTushareRows(ctx, tx, prefix, suffix, rows, 11, "upsert Tushare valuation snapshots")
 }
 
 func writeTushareFactors(ctx context.Context, tx *sql.Tx, factors []tushareFactor) error {
 	latest := make(map[string]string, len(factors))
+	rows := make([][]any, 0, len(factors))
 	for _, factor := range factors {
 		if factor.TradeDate > latest[factor.Code] {
 			latest[factor.Code] = factor.TradeDate
@@ -749,29 +883,87 @@ func writeTushareFactors(ctx context.Context, tx *sql.Tx, factors []tushareFacto
 		if err != nil {
 			return fmt.Errorf("calculate Tushare qfq factor %q/%q: %w", factor.Code, factor.TradeDate, err)
 		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO daily_adjustment_factors (instrument_code, trade_date, qfq_factor, hfq_factor)
-			VALUES (?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE qfq_factor = VALUES(qfq_factor), hfq_factor = VALUES(hfq_factor)`,
-			factor.Code, factor.TradeDate, qfq, factor.Value); err != nil {
-			return fmt.Errorf("upsert Tushare adjustment factor %q/%q: %w", factor.Code, factor.TradeDate, err)
+		rows = append(rows, []any{factor.Code, factor.TradeDate, qfq, factor.Value})
+	}
+	return writeTushareRows(ctx, tx,
+		`INSERT INTO daily_adjustment_factors (instrument_code, trade_date, qfq_factor, hfq_factor) VALUES `,
+		` ON DUPLICATE KEY UPDATE qfq_factor = VALUES(qfq_factor), hfq_factor = VALUES(hfq_factor)`, rows, 4,
+		"upsert Tushare adjustment factors")
+}
+
+func writeTushareIndexes(ctx context.Context, tx *sql.Tx, indexes []tushareIndex) error {
+	observedAt := time.Now().UTC().Format("2006-01-02 15:04:05")
+	rows := make([][]any, 0, len(indexes))
+	for _, index := range indexes {
+		rows = append(rows, []any{index.Code, index.Name, index.TradeDate, observedAt, index.Close, index.Change, index.ChangePercent})
+	}
+	return writeTushareRows(ctx, tx,
+		`INSERT INTO index_snapshots (code, name, trade_date, observed_at, close_price, change_amount, change_percent) VALUES `,
+		` ON DUPLICATE KEY UPDATE name = VALUES(name), observed_at = VALUES(observed_at), close_price = VALUES(close_price), change_amount = VALUES(change_amount), change_percent = VALUES(change_percent)`, rows, 7,
+		"upsert Tushare index snapshots")
+}
+
+func writeTushareRows(ctx context.Context, tx *sql.Tx, prefix, suffix string, rows [][]any, columns int, description string) error {
+	for offset := 0; offset < len(rows); offset += tushareWriteChunkSize {
+		end := minTushareIndex(offset+tushareWriteChunkSize, len(rows))
+		args := make([]any, 0, (end-offset)*columns)
+		for _, row := range rows[offset:end] {
+			if len(row) != columns {
+				return fmt.Errorf("%s row has %d values, want %d", description, len(row), columns)
+			}
+			args = append(args, row...)
+		}
+		if err := executeTushareChunk(ctx, tx, prefix, suffix, end-offset, columns, args, description); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func writeTushareIndexes(ctx context.Context, tx *sql.Tx, indexes []tushareIndex) error {
-	observedAt := time.Now().UTC().Format("2006-01-02 15:04:05")
-	for _, index := range indexes {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO index_snapshots (code, name, trade_date, observed_at, close_price, change_amount, change_percent)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE name = VALUES(name), observed_at = VALUES(observed_at), close_price = VALUES(close_price), change_amount = VALUES(change_amount), change_percent = VALUES(change_percent)`,
-			index.Code, index.Name, index.TradeDate, observedAt, index.Close, index.Change, index.ChangePercent); err != nil {
-			return fmt.Errorf("upsert Tushare index %q/%q: %w", index.Code, index.TradeDate, err)
-		}
+func executeTushareChunk(ctx context.Context, tx *sql.Tx, prefix, suffix string, rows, columns int, args []any, description string) error {
+	if rows == 0 {
+		return nil
+	}
+	if len(args) != rows*columns {
+		return fmt.Errorf("%s has %d arguments, want %d", description, len(args), rows*columns)
+	}
+	query := prefix + tusharePlaceholders(rows, columns) + suffix
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("%s batch: %w", description, err)
 	}
 	return nil
+}
+
+func tusharePlaceholders(rows, columns int) string {
+	var builder strings.Builder
+	for row := 0; row < rows; row++ {
+		if row > 0 {
+			builder.WriteString(",")
+		}
+		builder.WriteString("(")
+		for column := 0; column < columns; column++ {
+			if column > 0 {
+				builder.WriteString(",")
+			}
+			builder.WriteString("?")
+		}
+		builder.WriteString(")")
+	}
+	return builder.String()
+}
+
+func minTushareIndex(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func nullableTushareValue(value string) any {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return value
 }
 
 func writeTushareMetadata(ctx context.Context, tx *sql.Tx, metadataName, version, asOf string) error {

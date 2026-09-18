@@ -98,3 +98,26 @@ func TestSyncDateRangeDefaultsAndValidation(t *testing.T) {
 		t.Fatal("syncDateRange() error = nil, want invalid range error")
 	}
 }
+
+func TestFilterTushareBatchToInstruments(t *testing.T) {
+	batch := tushareBatch{
+		Instruments: []tushareInstrument{{Code: "000001.SZ"}},
+		Bars:        []tushareBar{{Code: "000001.SZ"}, {Code: "600000.SH"}},
+		Basics:      []tushareBasic{{Code: "000001.SZ"}, {Code: "600000.SH"}},
+		Factors:     []tushareFactor{{Code: "000001.SZ"}, {Code: "600000.SH"}},
+	}
+
+	filterTushareBatchToInstruments(&batch)
+	if len(batch.Bars) != 1 || len(batch.Basics) != 1 || len(batch.Factors) != 1 {
+		t.Fatalf("filtered batch counts = %d/%d/%d, want 1/1/1", len(batch.Bars), len(batch.Basics), len(batch.Factors))
+	}
+	if batch.Bars[0].Code != "000001.SZ" || batch.Basics[0].Code != "000001.SZ" || batch.Factors[0].Code != "000001.SZ" {
+		t.Fatalf("filtered batch retained unexpected instrument: %#v", batch)
+	}
+}
+
+func TestTusharePlaceholders(t *testing.T) {
+	if got := tusharePlaceholders(2, 3); got != "(?,?,?),(?,?,?)" {
+		t.Fatalf("tusharePlaceholders() = %q", got)
+	}
+}
