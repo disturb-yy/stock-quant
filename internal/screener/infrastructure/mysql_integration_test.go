@@ -3,8 +3,11 @@ package infrastructure
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/disturb-yy/stock-quant/internal/demo"
 	demoinfrastructure "github.com/disturb-yy/stock-quant/internal/demo/infrastructure"
@@ -41,6 +44,16 @@ func TestMySQLScreenerReaderAndService(t *testing.T) {
 	if err := store.SeedDemo(context.Background(), fixture); err != nil {
 		t.Fatalf("repeat seed: %v", err)
 	}
+	savedStore, err := NewMySQLSavedScreenerStore(database)
+	if err != nil {
+		t.Fatalf("initialize saved screener store: %v", err)
+	}
+	if err := savedStore.Migrate(context.Background()); err != nil {
+		t.Fatalf("saved screener migration: %v", err)
+	}
+	if err := savedStore.Migrate(context.Background()); err != nil {
+		t.Fatalf("repeat saved screener migration: %v", err)
+	}
 	reader, err := NewMySQLReader(database, domain.Source{Mode: "demo", Provider: "mysql-demo-fixture"})
 	if err != nil {
 		t.Fatalf("NewMySQLReader() error = %v", err)
@@ -69,5 +82,50 @@ func TestMySQLScreenerReaderAndService(t *testing.T) {
 	}
 	if empty.MatchedCount != 0 || empty.Results == nil || len(empty.Results) != 0 {
 		t.Fatalf("empty result = %#v, want 200-compatible empty result", empty)
+	}
+	savedService, err := screener.NewSavedScreenerService(savedStore)
+	if err != nil {
+		t.Fatalf("NewSavedScreenerService() error = %v", err)
+	}
+	name := fmt.Sprintf("集成测试方案-%d", time.Now().UnixNano())
+	description := "仅保存规范化条件"
+	saved, err := savedService.Create(context.Background(), domain.SavedScreenerInput{
+		Name: name, Description: &description,
+		Spec: domain.ScreenerSpec{UniverseID: domain.ActiveAShareUniverse, Filters: []domain.Filter{{FieldID: "valuation.pe_ttm", Operator: domain.OperatorLessEqual, Value: "15"}}, Ranking: domain.Ranking{FieldID: "technical.volume", Direction: "desc"}, TopN: 3},
+	})
+	if err != nil {
+		t.Fatalf("create saved screener: %v", err)
+	}
+	loaded, err := savedService.Get(context.Background(), saved.ID)
+	if err != nil {
+		t.Fatalf("get saved screener: %v", err)
+	}
+	if loaded.Version != 1 || loaded.Name != name || loaded.Spec.Filters[0].Value != "15" {
+		t.Fatalf("loaded saved screener = %#v, want canonical version 1", loaded)
+	}
+	updatedDescription := "更新后的条件"
+	updated, err := savedService.Update(context.Background(), saved.ID, saved.Version, domain.SavedScreenerInput{
+		Name: name, Description: &updatedDescription,
+		Spec: domain.ScreenerSpec{UniverseID: domain.ActiveAShareUniverse, Filters: []domain.Filter{}, Ranking: domain.Ranking{FieldID: "technical.close", Direction: "asc"}, TopN: 1},
+	})
+	if err != nil {
+		t.Fatalf("update saved screener: %v", err)
+	}
+	if updated.Version != 2 || updated.Description == nil || *updated.Description != updatedDescription {
+		t.Fatalf("updated saved screener = %#v, want version 2", updated)
+	}
+	_, err = savedService.Update(context.Background(), saved.ID, saved.Version, domain.SavedScreenerInput{
+		Name: name, Spec: updated.Spec,
+	})
+	var conflict *domain.SavedScreenerVersionConflictError
+	if !errors.As(err, &conflict) || conflict.CurrentVersion != 2 {
+		t.Fatalf("stale update error = %v, want current version conflict", err)
+	}
+	var versionCount int
+	if err := database.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM t_screener_version WHERE screener_id = ?`, saved.ID).Scan(&versionCount); err != nil {
+		t.Fatalf("count saved screener versions: %v", err)
+	}
+	if versionCount != 2 {
+		t.Fatalf("saved screener version count = %d, want 2 after stale update", versionCount)
 	}
 }

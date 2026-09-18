@@ -126,7 +126,7 @@ func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuat
 }, valuationReader interface {
 	Valuation(context.Context, stock.ValuationRequest) (stock.StockValuation, error)
 }, statusReaders ...demo.StatusReader) *gin.Engine {
-	return newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, nil, statusReaders...)
+	return newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, nil, nil, statusReaders...)
 }
 
 func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger *slog.Logger, overviewReader interface {
@@ -147,7 +147,7 @@ func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuat
 	Valuation(context.Context, stock.ValuationRequest) (stock.StockValuation, error)
 }, screenerReader interface {
 	Run(context.Context, screener.ScreenerRunRequest) (screener.ScreenerRunResponse, error)
-}, statusReaders ...demo.StatusReader) *gin.Engine {
+}, savedScreenerReader screener.SavedScreenerQuery, statusReaders ...demo.StatusReader) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(logger.GinMiddleware(applicationLogger), gin.CustomRecovery(apiV1RecoveryHandler))
@@ -167,6 +167,7 @@ func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuat
 	stock.RegisterFinancialsRoutes(apiV1, financialsReader)
 	stock.RegisterValuationRoutes(apiV1, valuationReader)
 	screener.RegisterRoutes(apiV1, screenerReader)
+	screener.RegisterSavedRoutes(apiV1, savedScreenerReader)
 	if len(statusReaders) > 0 {
 		demo.RegisterRoutes(apiV1, statusReaders[0])
 	}
@@ -287,7 +288,7 @@ func newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndVa
 }, valuationReader interface {
 	Valuation(context.Context, stock.ValuationRequest) (stock.StockValuation, error)
 }, statusReaders ...demo.StatusReader) *http.Server {
-	return newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger, address, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, nil, statusReaders...)
+	return newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger, address, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, nil, nil, statusReaders...)
 }
 
 func newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger *slog.Logger, address string, overviewReader interface {
@@ -308,10 +309,10 @@ func newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndVa
 	Valuation(context.Context, stock.ValuationRequest) (stock.StockValuation, error)
 }, screenerReader interface {
 	Run(context.Context, screener.ScreenerRunRequest) (screener.ScreenerRunResponse, error)
-}, statusReaders ...demo.StatusReader) *http.Server {
+}, savedScreenerReader screener.SavedScreenerQuery, statusReaders ...demo.StatusReader) *http.Server {
 	return &http.Server{
 		Addr:    address,
-		Handler: newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, screenerReader, statusReaders...),
+		Handler: newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, screenerReader, savedScreenerReader, statusReaders...),
 	}
 }
 

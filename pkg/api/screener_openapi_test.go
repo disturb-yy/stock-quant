@@ -32,4 +32,18 @@ func TestOpenAPIScreenerContract(t *testing.T) {
 	if len(filter["operator"].(map[string]any)["enum"].([]string)) != 7 {
 		t.Fatal("screener operator enum must expose all supported operators")
 	}
+	for _, path := range []string{"/api/v1/screeners", "/api/v1/screeners/{id}"} {
+		if _, ok := paths[path]; !ok {
+			t.Fatalf("OpenAPI missing saved screener path %s", path)
+		}
+	}
+	for _, schemaName := range []string{"Screener", "ScreenerCreateRequest", "ScreenerUpdateRequest", "ScreenerListResponse"} {
+		if _, ok := schemas[schemaName]; !ok {
+			t.Fatalf("OpenAPI missing saved screener schema %s", schemaName)
+		}
+	}
+	updatePath := paths["/api/v1/screeners/{id}"].(map[string]any)["put"].(map[string]any)
+	if _, ok := updatePath["responses"].(map[string]any)["409"]; !ok {
+		t.Fatal("saved screener update must publish 409 conflict response")
+	}
 }

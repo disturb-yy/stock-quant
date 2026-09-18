@@ -34,6 +34,8 @@ func apiPaths(includeDevelopment bool) map[string]any {
 		"/api/v1/stocks/{symbol}/bars":       stockBarsPath(),
 		"/api/v1/stocks/{symbol}/financials": stockFinancialsPath(),
 		"/api/v1/stocks/{symbol}/valuation":  stockValuationPath(),
+		"/api/v1/screeners":                  screenersPath(),
+		"/api/v1/screeners/{id}":             screenerByIDPath(),
 		"/api/v1/screeners/run":              screenerRunPath(),
 		"/api/v1/openapi.json":               openAPIPath(),
 	}
@@ -350,6 +352,106 @@ func screenerRunPath() map[string]any {
 	}
 }
 
+func screenersPath() map[string]any {
+	return map[string]any{
+		"post": map[string]any{
+			"operationId": "createScreener",
+			"summary":     "保存规范化的量化选股方案",
+			"requestBody": screenerRequestBody("ScreenerCreateRequest", map[string]any{
+				"name": "低估值方案", "description": "仅保存条件，不保存执行结果。",
+				"spec": map[string]any{
+					"universe_id": "cn_a_share_active", "filters": []map[string]any{{"field_id": "valuation.pe_ttm", "operator": "lte", "value": "15"}},
+					"ranking": map[string]any{"field_id": "technical.volume", "direction": "desc"}, "top_n": 20,
+				},
+			}),
+			"responses": savedScreenerResponses("保存方案", "Screener"),
+		},
+		"get": map[string]any{
+			"operationId": "listScreeners",
+			"summary":     "按最近更新时间分页读取保存方案",
+			"parameters":  screenerPaginationParameters(),
+			"responses":   savedScreenerListResponses(),
+		},
+	}
+}
+
+func screenerByIDPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "getScreener",
+			"summary":     "读取当前保存方案",
+			"parameters":  []any{screenerIDParameter()},
+			"responses":   savedScreenerResponses("保存方案", "Screener"),
+		},
+		"put": map[string]any{
+			"operationId": "updateScreener",
+			"summary":     "按版本号更新保存方案",
+			"parameters":  []any{screenerIDParameter()},
+			"requestBody": screenerRequestBody("ScreenerUpdateRequest", map[string]any{
+				"name": "更新后的方案", "description": nil,
+				"spec": map[string]any{
+					"universe_id": "cn_a_share_active", "filters": []map[string]any{},
+					"ranking": map[string]any{"field_id": "technical.close", "direction": "desc"}, "top_n": 10,
+				}, "version": 1,
+			}),
+			"responses": map[string]any{
+				"200": jsonReferenceResponse("更新后的保存方案", "#/components/schemas/Screener"),
+				"400": errorResponse("保存方案参数无效"),
+				"404": errorResponse("保存方案不存在"),
+				"405": errorResponse("请求方法不被允许"),
+				"409": errorResponse("保存方案版本已过期"),
+				"503": errorResponse("保存方案数据不可用"),
+			},
+		},
+	}
+}
+
+func screenerRequestBody(schema string, example map[string]any) map[string]any {
+	return map[string]any{
+		"required": true,
+		"content": map[string]any{
+			"application/json": map[string]any{
+				"schema":  map[string]any{"$ref": "#/components/schemas/" + schema},
+				"example": example,
+			},
+		},
+	}
+}
+
+func screenerIDParameter() map[string]any {
+	return map[string]any{
+		"name": "id", "in": "path", "required": true,
+		"schema": map[string]any{"type": "integer", "format": "int64", "minimum": 1, "example": 1},
+	}
+}
+
+func screenerPaginationParameters() []any {
+	return []any{
+		map[string]any{"name": "page", "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": DefaultPage, "default": DefaultPage}},
+		map[string]any{"name": "page_size", "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": 1, "maximum": MaxPageSize, "default": DefaultPageSize}},
+	}
+}
+
+func savedScreenerResponses(description, schema string) map[string]any {
+	return map[string]any{
+		"200": jsonReferenceResponse(description, "#/components/schemas/"+schema),
+		"400": errorResponse("保存方案参数无效"),
+		"404": errorResponse("保存方案不存在"),
+		"405": errorResponse("请求方法不被允许"),
+		"503": errorResponse("保存方案数据不可用"),
+	}
+}
+
+func savedScreenerListResponses() map[string]any {
+	return map[string]any{
+		"200": jsonReferenceResponse("保存方案列表", "#/components/schemas/ScreenerListResponse"),
+		"400": errorResponse("分页参数无效"),
+		"404": errorResponse("请求的资源不存在"),
+		"405": errorResponse("请求方法不被允许"),
+		"503": errorResponse("保存方案数据不可用"),
+	}
+}
+
 func stockValuationResponse() map[string]any {
 	return map[string]any{
 		"description": "股票估值、历史分位与同业中位数",
@@ -476,6 +578,10 @@ func apiComponents() map[string]any {
 			"StockIndustryMetric":            stockIndustryMetricSchema(),
 			"StockValuationSource":           stockValuationSourceSchema(),
 			"ScreenerRunRequest":             screenerRunRequestSchema(),
+			"ScreenerCreateRequest":          screenerCreateRequestSchema(),
+			"ScreenerUpdateRequest":          screenerUpdateRequestSchema(),
+			"Screener":                       screenerSchema(),
+			"ScreenerListResponse":           screenerListResponseSchema(),
 			"ScreenerSpec":                   screenerSpecSchema(),
 			"ScreenerFilter":                 screenerFilterSchema(),
 			"ScreenerRanking":                screenerRankingSchema(),
@@ -924,6 +1030,50 @@ func screenerRunRequestSchema() map[string]any {
 	return map[string]any{"type": "object", "required": []string{"spec"}, "properties": map[string]any{"spec": map[string]any{"$ref": "#/components/schemas/ScreenerSpec"}}}
 }
 
+func screenerCreateRequestSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"name", "spec"},
+		"properties": map[string]any{
+			"name":        map[string]any{"type": "string", "minLength": 1, "maxLength": 100},
+			"description": map[string]any{"type": "string", "maxLength": 500, "nullable": true},
+			"spec":        map[string]any{"$ref": "#/components/schemas/ScreenerSpec"},
+		},
+	}
+}
+
+func screenerUpdateRequestSchema() map[string]any {
+	schema := screenerCreateRequestSchema()
+	schema["required"] = []string{"name", "description", "spec", "version"}
+	properties := schema["properties"].(map[string]any)
+	properties["version"] = map[string]any{"type": "integer", "format": "int64", "minimum": 1}
+	return schema
+}
+
+func screenerSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"id", "name", "description", "spec", "version", "created_at", "updated_at"},
+		"properties": map[string]any{
+			"id":          map[string]any{"type": "integer", "format": "int64", "minimum": 1},
+			"name":        map[string]any{"type": "string", "example": "低估值方案"},
+			"description": map[string]any{"type": "string", "nullable": true, "example": "仅保存条件，不保存执行结果。"},
+			"spec":        map[string]any{"$ref": "#/components/schemas/ScreenerSpec"},
+			"version":     map[string]any{"type": "integer", "format": "int64", "minimum": 1, "example": 1},
+			"created_at":  map[string]any{"type": "string", "format": "date-time"},
+			"updated_at":  map[string]any{"type": "string", "format": "date-time"},
+		},
+	}
+}
+
+func screenerListResponseSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"data", "pagination"},
+		"properties": map[string]any{
+			"data":       map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/Screener"}},
+			"pagination": map[string]any{"$ref": "#/components/schemas/PaginationMeta"},
+		},
+	}
+}
+
 func screenerSpecSchema() map[string]any {
 	return map[string]any{
 		"type":        "object",
@@ -1092,6 +1242,7 @@ func errorSchema() map[string]any {
 					string(CodeMethodNotAllowed),
 					string(CodeValidation),
 					string(CodeInvalidPagination),
+					string(CodeConflict),
 					string(CodeInsufficientHistory),
 					string(CodeInternal),
 					string(CodeDependencyUnavailable),

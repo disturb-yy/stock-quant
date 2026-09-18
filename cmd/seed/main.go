@@ -9,6 +9,7 @@ import (
 
 	"github.com/disturb-yy/stock-quant/internal/demo"
 	"github.com/disturb-yy/stock-quant/internal/demo/infrastructure"
+	screenerinfrastructure "github.com/disturb-yy/stock-quant/internal/screener/infrastructure"
 	"github.com/disturb-yy/stock-quant/pkg/config"
 )
 
@@ -29,7 +30,14 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	savedScreenerStore, err := screenerinfrastructure.NewMySQLSavedScreenerStore(database)
+	if err != nil {
+		return err
+	}
 	if err := store.Migrate(ctx); err != nil {
+		return err
+	}
+	if err := savedScreenerStore.Migrate(ctx); err != nil {
 		return err
 	}
 	fixture := demo.DemoFixture()
