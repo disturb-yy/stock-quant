@@ -30,6 +30,24 @@ func TestNewManualStockPoolRejectsInvalidMetadata(t *testing.T) {
 	}
 }
 
+func TestNewStockPoolMemberPreservesMarketCode(t *testing.T) {
+	member, err := NewStockPoolMember("000001.SZ")
+	if err != nil {
+		t.Fatalf("NewStockPoolMember() error = %v", err)
+	}
+	if member.Symbol != "000001.SZ" || member.Name != "" {
+		t.Fatalf("member = %#v, want original symbol and server-owned name", member)
+	}
+}
+
+func TestNewStockPoolMemberRejectsTransformedOrMalformedCode(t *testing.T) {
+	for _, symbol := range []string{"", "000001", " 平安银行 ", "000001.SZ "} {
+		if _, err := NewStockPoolMember(symbol); err == nil {
+			t.Fatalf("NewStockPoolMember(%q) error = nil, want validation", symbol)
+		}
+	}
+}
+
 func stringPointer(value string) *string {
 	return &value
 }

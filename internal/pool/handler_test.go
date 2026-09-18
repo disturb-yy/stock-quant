@@ -16,13 +16,22 @@ import (
 )
 
 type fakeStockPoolQuery struct {
-	created   domain.StockPool
-	list      StockPoolListResponse
-	createErr error
-	listErr   error
-	getErr    error
-	input     domain.StockPoolInput
-	listReq   StockPoolListRequest
+	created      domain.StockPool
+	list         StockPoolListResponse
+	members      StockPoolMemberListResponse
+	added        StockPoolMemberAddResponse
+	deleted      StockPoolMemberDeleteResponse
+	createErr    error
+	listErr      error
+	getErr       error
+	membersErr   error
+	addErr       error
+	deleteErr    error
+	input        domain.StockPoolInput
+	listReq      StockPoolListRequest
+	membersReq   StockPoolMemberListRequest
+	memberID     int64
+	memberSymbol string
 }
 
 func (query *fakeStockPoolQuery) Create(_ context.Context, input domain.StockPoolInput) (domain.StockPool, error) {
@@ -37,6 +46,21 @@ func (query *fakeStockPoolQuery) List(_ context.Context, request StockPoolListRe
 
 func (query *fakeStockPoolQuery) Get(context.Context, int64) (domain.StockPool, error) {
 	return query.created, query.getErr
+}
+
+func (query *fakeStockPoolQuery) ListMembers(_ context.Context, id int64, request StockPoolMemberListRequest) (StockPoolMemberListResponse, error) {
+	query.memberID, query.membersReq = id, request
+	return query.members, query.membersErr
+}
+
+func (query *fakeStockPoolQuery) AddMember(_ context.Context, id int64, symbol string) (StockPoolMemberAddResponse, error) {
+	query.memberID, query.memberSymbol = id, symbol
+	return query.added, query.addErr
+}
+
+func (query *fakeStockPoolQuery) DeleteMember(_ context.Context, id int64, symbol string) (StockPoolMemberDeleteResponse, error) {
+	query.memberID, query.memberSymbol = id, symbol
+	return query.deleted, query.deleteErr
 }
 
 func TestRegisterRoutesSupportsCreateListAndDetail(t *testing.T) {
@@ -66,6 +90,24 @@ func TestRegisterRoutesSupportsCreateListAndDetail(t *testing.T) {
 	if detailResponse.Code != http.StatusOK || !strings.Contains(detailResponse.Body.String(), `"id":1`) {
 		t.Fatalf("detail status = %d, body = %s", detailResponse.Code, detailResponse.Body.String())
 	}
+
+	membersResponse := httptest.NewRecorder()
+	router.ServeHTTP(membersResponse, httptest.NewRequest(http.MethodGet, "/api/v1/stock-pools/1/members?page=2&page_size=10", nil))
+	if membersResponse.Code != http.StatusOK || query.memberID != 1 || query.membersReq.Page != 2 || query.membersReq.PageSize != 10 {
+		t.Fatalf("members status = %d, request = %#v", membersResponse.Code, query.membersReq)
+	}
+
+	addResponse := httptest.NewRecorder()
+	router.ServeHTTP(addResponse, httptest.NewRequest(http.MethodPost, "/api/v1/stock-pools/1/members", strings.NewReader(`{"symbol":"000001.SZ"}`)))
+	if addResponse.Code != http.StatusOK || query.memberSymbol != "000001.SZ" {
+		t.Fatalf("add member status = %d, body = %s", addResponse.Code, addResponse.Body.String())
+	}
+
+	deleteResponse := httptest.NewRecorder()
+	router.ServeHTTP(deleteResponse, httptest.NewRequest(http.MethodDelete, "/api/v1/stock-pools/1/members/000001.SZ", nil))
+	if deleteResponse.Code != http.StatusOK || query.memberSymbol != "000001.SZ" {
+		t.Fatalf("delete member status = %d, body = %s", deleteResponse.Code, deleteResponse.Body.String())
+	}
 }
 
 func TestRegisterRoutesRejectsServerOwnedFieldsAndMapsErrors(t *testing.T) {
@@ -84,6 +126,8 @@ func TestRegisterRoutesRejectsServerOwnedFieldsAndMapsErrors(t *testing.T) {
 		{name: "invalid id", method: http.MethodGet, path: "/api/v1/stock-pools/nope", query: &fakeStockPoolQuery{}, statusCode: http.StatusBadRequest, code: api.CodeValidation},
 		{name: "not found", method: http.MethodGet, path: "/api/v1/stock-pools/1", query: &fakeStockPoolQuery{getErr: domain.ErrStockPoolNotFound}, statusCode: http.StatusNotFound, code: api.CodeNotFound},
 		{name: "dependency", method: http.MethodGet, path: "/api/v1/stock-pools/1", query: &fakeStockPoolQuery{getErr: errors.New("database unavailable")}, statusCode: http.StatusServiceUnavailable, code: api.CodeDependencyUnavailable},
+		{name: "member conflict", method: http.MethodPost, path: "/api/v1/stock-pools/1/members", body: `{"symbol":"000001.SZ"}`, query: &fakeStockPoolQuery{addErr: domain.ErrStockPoolMemberConflict}, statusCode: http.StatusConflict, code: api.CodeConflict},
+		{name: "member missing", method: http.MethodDelete, path: "/api/v1/stock-pools/1/members/000001.SZ", query: &fakeStockPoolQuery{deleteErr: domain.ErrStockPoolMemberNotFound}, statusCode: http.StatusNotFound, code: api.CodeNotFound},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

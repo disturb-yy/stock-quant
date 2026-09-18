@@ -16,6 +16,14 @@ type StockPoolStore interface {
 	Create(context.Context, domain.StockPool) (domain.StockPool, error)
 	List(context.Context, string, int, int) ([]domain.StockPool, int64, error)
 	Get(context.Context, int64) (domain.StockPool, error)
+	ListMembers(context.Context, int64, int, int) ([]domain.StockPoolMember, int64, error)
+	AddMember(context.Context, int64, string) (domain.StockPoolMember, int64, error)
+	DeleteMember(context.Context, int64, string) (int64, error)
+}
+
+// StockIdentityReader 是复用 STK-001 股票身份表的最小查询边界。
+type StockIdentityReader interface {
+	Exists(context.Context, string) (bool, error)
 }
 
 // StockPoolQuery 是股票池 HTTP 适配器需要的最小应用接口。
@@ -23,6 +31,9 @@ type StockPoolQuery interface {
 	Create(context.Context, domain.StockPoolInput) (domain.StockPool, error)
 	List(context.Context, StockPoolListRequest) (StockPoolListResponse, error)
 	Get(context.Context, int64) (domain.StockPool, error)
+	ListMembers(context.Context, int64, StockPoolMemberListRequest) (StockPoolMemberListResponse, error)
+	AddMember(context.Context, int64, string) (StockPoolMemberAddResponse, error)
+	DeleteMember(context.Context, int64, string) (StockPoolMemberDeleteResponse, error)
 }
 
 // StockPoolListRequest 是股票池列表的搜索与分页请求。
@@ -38,17 +49,45 @@ type StockPoolListResponse struct {
 	Pagination api.PaginationMeta `json:"pagination"`
 }
 
+// StockPoolMemberListRequest 是股票池成员列表的分页请求。
+type StockPoolMemberListRequest struct {
+	Page     int
+	PageSize int
+}
+
+// StockPoolMemberListResponse 是股票池成员列表响应。
+type StockPoolMemberListResponse struct {
+	Data       []domain.StockPoolMember `json:"data"`
+	Pagination api.PaginationMeta       `json:"pagination"`
+}
+
+// StockPoolMemberAddResponse 是添加成员后的真实结果。
+type StockPoolMemberAddResponse struct {
+	Member      domain.StockPoolMember `json:"member"`
+	MemberCount int64                  `json:"member_count"`
+}
+
+// StockPoolMemberDeleteResponse 是删除成员后的真实结果。
+type StockPoolMemberDeleteResponse struct {
+	Symbol      string `json:"symbol"`
+	MemberCount int64  `json:"member_count"`
+}
+
 // Service 编排股票池的领域校验与持久化调用。
 type Service struct {
-	store StockPoolStore
+	store           StockPoolStore
+	stockIdentities StockIdentityReader
 }
 
 // NewService 创建股票池应用服务。
-func NewService(store StockPoolStore) (*Service, error) {
+func NewService(store StockPoolStore, stockIdentities StockIdentityReader) (*Service, error) {
 	if store == nil {
 		return nil, errors.New("stock pool store is required")
 	}
-	return &Service{store: store}, nil
+	if stockIdentities == nil {
+		return nil, errors.New("stock identity reader is required")
+	}
+	return &Service{store: store, stockIdentities: stockIdentities}, nil
 }
 
 // Create 创建来源固定为 manual 的股票池。
@@ -87,6 +126,69 @@ func (service *Service) Get(ctx context.Context, id int64) (domain.StockPool, er
 		return domain.StockPool{}, fmt.Errorf("get stock pool: %w", err)
 	}
 	return pool, nil
+}
+
+// ListMembers 读取股票池中的真实成员并按 symbol 稳定分页。
+func (service *Service) ListMembers(ctx context.Context, id int64, request StockPoolMemberListRequest) (StockPoolMemberListResponse, error) {
+	if id < 1 {
+		return StockPoolMemberListResponse{}, &domain.ValidationError{Fields: map[string]string{"id": "必须是大于等于 1 的整数"}}
+	}
+	page, pageSize, err := normalizePagination(request.Page, request.PageSize)
+	if err != nil {
+		return StockPoolMemberListResponse{}, err
+	}
+	items, total, err := service.store.ListMembers(ctx, id, page, pageSize)
+	if err != nil {
+		return StockPoolMemberListResponse{}, fmt.Errorf("list stock pool members: %w", err)
+	}
+	return StockPoolMemberListResponse{
+		Data: items,
+		Pagination: api.PaginationMeta{
+			Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages(total, int64(pageSize)),
+		},
+	}, nil
+}
+
+// AddMember 验证 Pool 和股票身份后添加一个成员。
+func (service *Service) AddMember(ctx context.Context, id int64, symbol string) (StockPoolMemberAddResponse, error) {
+	if id < 1 {
+		return StockPoolMemberAddResponse{}, &domain.ValidationError{Fields: map[string]string{"id": "必须是大于等于 1 的整数"}}
+	}
+	member, err := domain.NewStockPoolMember(symbol)
+	if err != nil {
+		return StockPoolMemberAddResponse{}, err
+	}
+	if _, err := service.store.Get(ctx, id); err != nil {
+		return StockPoolMemberAddResponse{}, fmt.Errorf("get stock pool before adding member: %w", err)
+	}
+	exists, err := service.stockIdentities.Exists(ctx, member.Symbol)
+	if err != nil {
+		return StockPoolMemberAddResponse{}, fmt.Errorf("check stock identity: %w", err)
+	}
+	if !exists {
+		return StockPoolMemberAddResponse{}, domain.ErrStockPoolInstrumentNotFound
+	}
+	created, count, err := service.store.AddMember(ctx, id, member.Symbol)
+	if err != nil {
+		return StockPoolMemberAddResponse{}, fmt.Errorf("add stock pool member: %w", err)
+	}
+	return StockPoolMemberAddResponse{Member: created, MemberCount: count}, nil
+}
+
+// DeleteMember 删除一个真实存在的股票池成员。
+func (service *Service) DeleteMember(ctx context.Context, id int64, symbol string) (StockPoolMemberDeleteResponse, error) {
+	if id < 1 {
+		return StockPoolMemberDeleteResponse{}, &domain.ValidationError{Fields: map[string]string{"id": "必须是大于等于 1 的整数"}}
+	}
+	member, err := domain.NewStockPoolMember(symbol)
+	if err != nil {
+		return StockPoolMemberDeleteResponse{}, err
+	}
+	count, err := service.store.DeleteMember(ctx, id, member.Symbol)
+	if err != nil {
+		return StockPoolMemberDeleteResponse{}, fmt.Errorf("delete stock pool member: %w", err)
+	}
+	return StockPoolMemberDeleteResponse{Symbol: member.Symbol, MemberCount: count}, nil
 }
 
 func normalizeListRequest(request StockPoolListRequest) (StockPoolListRequest, error) {

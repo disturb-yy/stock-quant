@@ -4,6 +4,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -25,6 +26,16 @@ const (
 
 var ErrStockPoolNotFound = errors.New("stock pool not found")
 
+var (
+	// ErrStockPoolMemberNotFound 表示指定成员不在股票池中。
+	ErrStockPoolMemberNotFound = errors.New("stock pool member not found")
+	// ErrStockPoolMemberConflict 表示成员已存在于股票池中。
+	ErrStockPoolMemberConflict = errors.New("stock pool member already exists")
+	// ErrStockPoolInstrumentNotFound 表示股票身份不存在。
+	ErrStockPoolInstrumentNotFound = errors.New("stock pool instrument not found")
+	stockSymbolPattern             = regexp.MustCompile(`^[A-Za-z0-9]{1,16}\.[A-Za-z]{2,8}$`)
+)
+
 // StockPool 是可独立访问的股票池身份与概览元数据。
 type StockPool struct {
 	ID          int64     `json:"id"`
@@ -40,6 +51,20 @@ type StockPool struct {
 type StockPoolInput struct {
 	Name        string
 	Description *string
+}
+
+// StockPoolMember 是股票池成员的真实股票身份和展示名称。
+type StockPoolMember struct {
+	Symbol string `json:"symbol"`
+	Name   string `json:"name"`
+}
+
+// NewStockPoolMember 校验并保留 Markets 返回的原始股票代码。
+func NewStockPoolMember(symbol string) (StockPoolMember, error) {
+	if strings.TrimSpace(symbol) != symbol || !stockSymbolPattern.MatchString(symbol) {
+		return StockPoolMember{}, &ValidationError{Fields: map[string]string{"symbol": "必须是 Markets 返回的股票代码"}}
+	}
+	return StockPoolMember{Symbol: symbol}, nil
 }
 
 // ValidationError 表示可安全暴露给 API 的字段校验失败。

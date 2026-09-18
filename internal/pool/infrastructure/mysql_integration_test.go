@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/disturb-yy/stock-quant/internal/pool"
 	"github.com/disturb-yy/stock-quant/internal/pool/domain"
+	stockinfrastructure "github.com/disturb-yy/stock-quant/internal/stock/infrastructure"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -27,6 +29,22 @@ func TestMySQLStockPoolStore(t *testing.T) {
 	if err := database.PingContext(context.Background()); err != nil {
 		t.Fatalf("ping test MySQL: %v", err)
 	}
+	if _, err := database.ExecContext(context.Background(), `
+        CREATE TABLE IF NOT EXISTS instruments (
+            code VARCHAR(32) NOT NULL PRIMARY KEY,
+            name VARCHAR(128) NOT NULL,
+            exchange VARCHAR(16) NOT NULL,
+            status VARCHAR(32) NOT NULL,
+            as_of DATE NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+		t.Fatalf("create instrument fixture: %v", err)
+	}
+	if _, err := database.ExecContext(context.Background(), `
+        INSERT INTO instruments (code, name, exchange, status, as_of)
+        VALUES ('000001.SZ', '平安银行', 'SZSE', 'active', '2024-06-28')
+        ON DUPLICATE KEY UPDATE name = VALUES(name)`); err != nil {
+		t.Fatalf("seed instrument fixture: %v", err)
+	}
 	store, err := NewMySQLStockPoolStore(database)
 	if err != nil {
 		t.Fatalf("NewMySQLStockPoolStore() error = %v", err)
@@ -43,9 +61,17 @@ func TestMySQLStockPoolStore(t *testing.T) {
 	if err := store.SeedDemo(context.Background()); err != nil {
 		t.Fatalf("repeat demo seed: %v", err)
 	}
-	service, err := pool.NewService(store)
+	stockReader, err := stockinfrastructure.NewMySQLOverviewReader(database)
+	if err != nil {
+		t.Fatalf("NewMySQLOverviewReader() error = %v", err)
+	}
+	service, err := pool.NewService(store, stockReader)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
+	}
+	demoPools, err := service.List(context.Background(), pool.StockPoolListRequest{Search: "演示手工股票池"})
+	if err != nil || len(demoPools.Data) != 1 || demoPools.Data[0].MemberCount != 1 {
+		t.Fatalf("demo pools = %#v, error = %v, want one member", demoPools, err)
 	}
 	name := fmt.Sprintf("集成测试池-%d", time.Now().UnixNano())
 	created, err := service.Create(context.Background(), domain.StockPoolInput{Name: name + "-1"})
@@ -79,5 +105,23 @@ func TestMySQLStockPoolStore(t *testing.T) {
 	}
 	if loaded.Name != name+"-1" || loaded.Source != domain.SourceManual || loaded.MemberCount != 0 {
 		t.Fatalf("loaded pool = %#v, want persisted metadata", loaded)
+	}
+	added, err := service.AddMember(context.Background(), created.ID, "000001.SZ")
+	if err != nil || added.Member.Symbol != "000001.SZ" || added.Member.Name != "平安银行" || added.MemberCount != 1 {
+		t.Fatalf("added member = %#v, error = %v", added, err)
+	}
+	if _, err := service.AddMember(context.Background(), created.ID, "000001.SZ"); !errors.Is(err, domain.ErrStockPoolMemberConflict) {
+		t.Fatalf("duplicate member error = %v, want conflict", err)
+	}
+	members, err := service.ListMembers(context.Background(), created.ID, pool.StockPoolMemberListRequest{Page: 1, PageSize: 20})
+	if err != nil || len(members.Data) != 1 || members.Data[0].Symbol != "000001.SZ" {
+		t.Fatalf("members = %#v, error = %v", members, err)
+	}
+	deleted, err := service.DeleteMember(context.Background(), created.ID, "000001.SZ")
+	if err != nil || deleted.MemberCount != 0 || deleted.Symbol != "000001.SZ" {
+		t.Fatalf("deleted member = %#v, error = %v", deleted, err)
+	}
+	if _, err := service.DeleteMember(context.Background(), created.ID, "000001.SZ"); !errors.Is(err, domain.ErrStockPoolMemberNotFound) {
+		t.Fatalf("missing member error = %v, want not found", err)
 	}
 }

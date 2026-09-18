@@ -22,6 +22,15 @@ func NewMySQLOverviewReader(db *sql.DB) (*MySQLOverviewReader, error) {
 	return &MySQLOverviewReader{db: db}, nil
 }
 
+// Exists 检查股票身份是否存在，不要求行情等详情数据已齐备。
+func (reader *MySQLOverviewReader) Exists(ctx context.Context, symbol string) (bool, error) {
+	var exists bool
+	if err := reader.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM instruments WHERE code = ?)`, symbol).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check stock identity: %w", err)
+	}
+	return exists, nil
+}
+
 // ReadStockOverview 聚合一只股票的身份、行情、指标和走势图。
 func (reader *MySQLOverviewReader) ReadStockOverview(ctx context.Context, symbol string) (stock.OverviewSnapshot, error) {
 	snapshot, err := reader.readIdentity(ctx, symbol)

@@ -25,21 +25,23 @@ func apiInfo() map[string]any {
 
 func apiPaths(includeDevelopment bool) map[string]any {
 	paths := map[string]any{
-		"/api/v1/health":                     healthPath(),
-		"/api/v1/markets/overview":           marketOverviewPath(),
-		"/api/v1/markets/sectors":            marketSectorsPath(),
-		"/api/v1/markets/signals":            marketSignalsPath(),
-		"/api/v1/markets/rankings":           marketRankingsPath(),
-		"/api/v1/stocks/{symbol}":            stockOverviewPath(),
-		"/api/v1/stocks/{symbol}/bars":       stockBarsPath(),
-		"/api/v1/stocks/{symbol}/financials": stockFinancialsPath(),
-		"/api/v1/stocks/{symbol}/valuation":  stockValuationPath(),
-		"/api/v1/screeners":                  screenersPath(),
-		"/api/v1/screeners/{id}":             screenerByIDPath(),
-		"/api/v1/screeners/run":              screenerRunPath(),
-		"/api/v1/stock-pools":                stockPoolsPath(),
-		"/api/v1/stock-pools/{id}":           stockPoolByIDPath(),
-		"/api/v1/openapi.json":               openAPIPath(),
+		"/api/v1/health":                            healthPath(),
+		"/api/v1/markets/overview":                  marketOverviewPath(),
+		"/api/v1/markets/sectors":                   marketSectorsPath(),
+		"/api/v1/markets/signals":                   marketSignalsPath(),
+		"/api/v1/markets/rankings":                  marketRankingsPath(),
+		"/api/v1/stocks/{symbol}":                   stockOverviewPath(),
+		"/api/v1/stocks/{symbol}/bars":              stockBarsPath(),
+		"/api/v1/stocks/{symbol}/financials":        stockFinancialsPath(),
+		"/api/v1/stocks/{symbol}/valuation":         stockValuationPath(),
+		"/api/v1/screeners":                         screenersPath(),
+		"/api/v1/screeners/{id}":                    screenerByIDPath(),
+		"/api/v1/screeners/run":                     screenerRunPath(),
+		"/api/v1/stock-pools":                       stockPoolsPath(),
+		"/api/v1/stock-pools/{id}":                  stockPoolByIDPath(),
+		"/api/v1/stock-pools/{id}/members":          stockPoolMembersPath(),
+		"/api/v1/stock-pools/{id}/members/{symbol}": stockPoolMemberBySymbolPath(),
+		"/api/v1/openapi.json":                      openAPIPath(),
 	}
 	if includeDevelopment {
 		paths["/api/v1/dev/demo-status"] = demoStatusPath()
@@ -483,6 +485,36 @@ func stockPoolByIDPath() map[string]any {
 	}
 }
 
+func stockPoolMembersPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "listStockPoolMembers",
+			"summary":     "按原始股票代码升序分页读取股票池成员",
+			"description": "成员 symbol 直接复用 instruments.code/Markets code，不按名称、排名或本地映射转换。",
+			"parameters":  append([]any{stockPoolIDParameter()}, stockPoolMemberPaginationParameters()...),
+			"responses":   stockPoolMemberListResponses(),
+		},
+		"post": map[string]any{
+			"operationId": "addStockPoolMember",
+			"summary":     "向股票池添加一只真实股票",
+			"parameters":  []any{stockPoolIDParameter()},
+			"requestBody": stockPoolMemberRequestBody(),
+			"responses":   stockPoolMemberAddResponses(),
+		},
+	}
+}
+
+func stockPoolMemberBySymbolPath() map[string]any {
+	return map[string]any{
+		"delete": map[string]any{
+			"operationId": "deleteStockPoolMember",
+			"summary":     "从股票池删除一只真实股票",
+			"parameters":  []any{stockPoolIDParameter(), stockPoolMemberSymbolParameter()},
+			"responses":   stockPoolMemberDeleteResponses(),
+		},
+	}
+}
+
 func stockPoolRequestBody() map[string]any {
 	return map[string]any{
 		"required": true,
@@ -503,10 +535,25 @@ func stockPoolListParameters() []any {
 	}
 }
 
+func stockPoolMemberPaginationParameters() []any {
+	return []any{
+		map[string]any{"name": "page", "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": DefaultPage, "default": DefaultPage}},
+		map[string]any{"name": "page_size", "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": 1, "maximum": MaxPageSize, "default": DefaultPageSize}},
+	}
+}
+
 func stockPoolIDParameter() map[string]any {
 	return map[string]any{
 		"name": "id", "in": "path", "required": true,
 		"schema": map[string]any{"type": "integer", "format": "int64", "minimum": 1, "example": 1},
+	}
+}
+
+func stockPoolMemberSymbolParameter() map[string]any {
+	return map[string]any{
+		"name": "symbol", "in": "path", "required": true,
+		"description": "直接使用 Markets API 返回的 code，不做名称、排名或本地映射转换。",
+		"schema":      map[string]any{"type": "string", "pattern": "^[A-Za-z0-9]{1,16}\\.[A-Za-z]{2,8}$", "example": "000001.SZ"},
 	}
 }
 
@@ -526,6 +573,49 @@ func stockPoolListResponses() map[string]any {
 		"400": errorResponse("搜索或分页参数无效"),
 		"405": errorResponse("请求方法不被允许"),
 		"503": errorResponse("股票池数据不可用"),
+	}
+}
+
+func stockPoolMemberRequestBody() map[string]any {
+	return map[string]any{
+		"required": true,
+		"content": map[string]any{
+			"application/json": map[string]any{
+				"schema":  map[string]any{"$ref": "#/components/schemas/StockPoolMemberAddRequest"},
+				"example": map[string]any{"symbol": "000001.SZ"},
+			},
+		},
+	}
+}
+
+func stockPoolMemberListResponses() map[string]any {
+	return map[string]any{
+		"200": jsonReferenceResponse("股票池成员列表", "#/components/schemas/StockPoolMemberListResponse"),
+		"400": errorResponse("股票池成员分页或身份参数无效"),
+		"404": errorResponse("股票池不存在"),
+		"405": errorResponse("请求方法不被允许"),
+		"503": errorResponse("股票池成员数据不可用"),
+	}
+}
+
+func stockPoolMemberAddResponses() map[string]any {
+	return map[string]any{
+		"200": jsonReferenceResponse("添加股票池成员结果", "#/components/schemas/StockPoolMemberAddResponse"),
+		"400": errorResponse("股票池成员参数无效"),
+		"404": errorResponse("股票池或股票不存在"),
+		"405": errorResponse("请求方法不被允许"),
+		"409": errorResponse("股票已在股票池中"),
+		"503": errorResponse("股票池成员数据不可用"),
+	}
+}
+
+func stockPoolMemberDeleteResponses() map[string]any {
+	return map[string]any{
+		"200": jsonReferenceResponse("删除股票池成员结果", "#/components/schemas/StockPoolMemberDeleteResponse"),
+		"400": errorResponse("股票池成员参数无效"),
+		"404": errorResponse("股票池或成员不存在"),
+		"405": errorResponse("请求方法不被允许"),
+		"503": errorResponse("股票池成员数据不可用"),
 	}
 }
 
@@ -672,6 +762,11 @@ func apiComponents() map[string]any {
 			"StockPoolCreateRequest":         stockPoolCreateRequestSchema(),
 			"StockPool":                      stockPoolSchema(),
 			"StockPoolListResponse":          stockPoolListResponseSchema(),
+			"StockPoolMember":                stockPoolMemberSchema(),
+			"StockPoolMemberAddRequest":      stockPoolMemberAddRequestSchema(),
+			"StockPoolMemberListResponse":    stockPoolMemberListResponseSchema(),
+			"StockPoolMemberAddResponse":     stockPoolMemberAddResponseSchema(),
+			"StockPoolMemberDeleteResponse":  stockPoolMemberDeleteResponseSchema(),
 		},
 	}
 }
@@ -1173,7 +1268,7 @@ func stockPoolSchema() map[string]any {
 			"name":         map[string]any{"type": "string", "example": "红利观察"},
 			"description":  map[string]any{"type": "string", "nullable": true, "example": "仅供长期观察。"},
 			"source":       map[string]any{"type": "string", "enum": []string{"manual"}},
-			"member_count": map[string]any{"type": "integer", "format": "int64", "minimum": 0, "description": "POL-001 尚未提供成员写入，真实值为 0；POL-002 写入后必须由持久化关系计算或同一事务维护。"},
+			"member_count": map[string]any{"type": "integer", "format": "int64", "minimum": 0, "description": "由 t_stock_pool_member 持久化关系实时计算。"},
 			"created_at":   map[string]any{"type": "string", "format": "date-time"},
 			"updated_at":   map[string]any{"type": "string", "format": "date-time"},
 		},
@@ -1186,6 +1281,57 @@ func stockPoolListResponseSchema() map[string]any {
 		"properties": map[string]any{
 			"data":       map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/StockPool"}},
 			"pagination": map[string]any{"$ref": "#/components/schemas/PaginationMeta"},
+		},
+	}
+}
+
+func stockPoolMemberSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"symbol", "name"},
+		"description": "真实股票身份；symbol 直接复用 Markets 返回的 code。",
+		"properties": map[string]any{
+			"symbol": map[string]any{"type": "string", "pattern": "^[A-Za-z0-9]{1,16}\\.[A-Za-z]{2,8}$", "example": "000001.SZ"},
+			"name":   map[string]any{"type": "string", "example": "平安银行"},
+		},
+	}
+}
+
+func stockPoolMemberAddRequestSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"symbol"}, "additionalProperties": false,
+		"description": "仅允许提交 Markets 返回的原始股票 code。",
+		"properties": map[string]any{
+			"symbol": map[string]any{"type": "string", "pattern": "^[A-Za-z0-9]{1,16}\\.[A-Za-z]{2,8}$", "example": "000001.SZ"},
+		},
+	}
+}
+
+func stockPoolMemberListResponseSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"data", "pagination"},
+		"properties": map[string]any{
+			"data":       map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/StockPoolMember"}},
+			"pagination": map[string]any{"$ref": "#/components/schemas/PaginationMeta"},
+		},
+	}
+}
+
+func stockPoolMemberAddResponseSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"member", "member_count"},
+		"properties": map[string]any{
+			"member":       map[string]any{"$ref": "#/components/schemas/StockPoolMember"},
+			"member_count": map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+		},
+	}
+}
+
+func stockPoolMemberDeleteResponseSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"symbol", "member_count"},
+		"properties": map[string]any{
+			"symbol":       map[string]any{"type": "string", "pattern": "^[A-Za-z0-9]{1,16}\\.[A-Za-z]{2,8}$", "example": "000001.SZ"},
+			"member_count": map[string]any{"type": "integer", "format": "int64", "minimum": 0},
 		},
 	}
 }

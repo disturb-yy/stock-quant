@@ -18,4 +18,5 @@
 - `financials_handler.go`：`GET /api/v1/stocks/{symbol}/financials` 参数解析及统一错误映射。
 - `valuation_handler.go`：`GET /api/v1/stocks/{symbol}/valuation` 参数解析及统一错误映射。
 - `infrastructure/mysql_overview.go`：身份、同日行情、daily basic、财务指标和 20 日 OHLC 点的 MySQL 聚合读取。
+- `infrastructure/mysql_overview.go`：同时提供复用 `instruments.code` 的身份存在性检查。
 - `infrastructure/mysql_financials.go`：财务报告、三张简化报表字段和 Seed 来源的 MySQL 读取。

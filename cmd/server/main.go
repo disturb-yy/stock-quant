@@ -160,7 +160,7 @@ func run(ctx context.Context) error {
 		applicationLogger.Error("initialize saved screener service", "error", err)
 		return err
 	}
-	stockPoolService, err := pool.NewService(stockPoolStore)
+	stockPoolService, err := pool.NewService(stockPoolStore, stockReader)
 	if err != nil {
 		applicationLogger.Error("initialize stock pool service", "error", err)
 		return err
