@@ -9,6 +9,7 @@ import (
 
 	"github.com/disturb-yy/stock-quant/internal/demo"
 	"github.com/disturb-yy/stock-quant/internal/demo/infrastructure"
+	poolinfrastructure "github.com/disturb-yy/stock-quant/internal/pool/infrastructure"
 	screenerinfrastructure "github.com/disturb-yy/stock-quant/internal/screener/infrastructure"
 	"github.com/disturb-yy/stock-quant/pkg/config"
 )
@@ -34,10 +35,17 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	stockPoolStore, err := poolinfrastructure.NewMySQLStockPoolStore(database)
+	if err != nil {
+		return err
+	}
 	if err := store.Migrate(ctx); err != nil {
 		return err
 	}
 	if err := savedScreenerStore.Migrate(ctx); err != nil {
+		return err
+	}
+	if err := stockPoolStore.Migrate(ctx); err != nil {
 		return err
 	}
 	fixture := demo.DemoFixture()
@@ -46,6 +54,9 @@ func run(ctx context.Context) error {
 		return err
 	}
 	if err := seeder.Seed(ctx, fixture); err != nil {
+		return err
+	}
+	if err := stockPoolStore.SeedDemo(ctx); err != nil {
 		return err
 	}
 	snapshot, err := store.ReadDemoSnapshot(ctx)

@@ -13,4 +13,4 @@
 - `response.go`：统一成功 envelope 和分页成功响应 DTO。
 - `error.go`：稳定错误码和错误 DTO，包含保存方案版本冲突码。
 - `pagination.go`：分页请求/响应 DTO、默认值和查询参数校验。
-- `openapi.go`：API v1 实际输出的 OpenAPI JSON 文档构造，包含市场概览、行业表现、市场信号、股票排行榜、股票详情、股票财务、股票估值、选股执行与保存方案响应、分页及来源 Schema。
+- `openapi.go`：API v1 实际输出的 OpenAPI JSON 文档构造，包含市场概览、行业表现、市场信号、股票排行榜、股票详情、股票财务、股票估值、选股执行、保存方案与股票池响应、分页及来源 Schema。

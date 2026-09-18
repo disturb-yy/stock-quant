@@ -37,6 +37,8 @@ func apiPaths(includeDevelopment bool) map[string]any {
 		"/api/v1/screeners":                  screenersPath(),
 		"/api/v1/screeners/{id}":             screenerByIDPath(),
 		"/api/v1/screeners/run":              screenerRunPath(),
+		"/api/v1/stock-pools":                stockPoolsPath(),
+		"/api/v1/stock-pools/{id}":           stockPoolByIDPath(),
 		"/api/v1/openapi.json":               openAPIPath(),
 	}
 	if includeDevelopment {
@@ -452,6 +454,81 @@ func savedScreenerListResponses() map[string]any {
 	}
 }
 
+func stockPoolsPath() map[string]any {
+	return map[string]any{
+		"post": map[string]any{
+			"operationId": "createStockPool",
+			"summary":     "创建来源固定为 manual 的手工股票池",
+			"requestBody": stockPoolRequestBody(),
+			"responses":   stockPoolResponses("新建股票池"),
+		},
+		"get": map[string]any{
+			"operationId": "listStockPools",
+			"summary":     "按名称搜索并按最近更新时间稳定分页读取股票池",
+			"description": "仅搜索 name；q 按字面包含匹配。固定排序为 updated_at DESC、id DESC，不支持客户端指定排序字段。",
+			"parameters":  stockPoolListParameters(),
+			"responses":   stockPoolListResponses(),
+		},
+	}
+}
+
+func stockPoolByIDPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "getStockPool",
+			"summary":     "读取股票池概览",
+			"parameters":  []any{stockPoolIDParameter()},
+			"responses":   stockPoolResponses("股票池概览"),
+		},
+	}
+}
+
+func stockPoolRequestBody() map[string]any {
+	return map[string]any{
+		"required": true,
+		"content": map[string]any{
+			"application/json": map[string]any{
+				"schema":  map[string]any{"$ref": "#/components/schemas/StockPoolCreateRequest"},
+				"example": map[string]any{"name": "红利观察", "description": "仅供长期观察。"},
+			},
+		},
+	}
+}
+
+func stockPoolListParameters() []any {
+	return []any{
+		map[string]any{"name": "q", "in": "query", "required": false, "description": "按 name 字面包含搜索，首尾空白会忽略。", "schema": map[string]any{"type": "string", "maxLength": 100}},
+		map[string]any{"name": "page", "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": DefaultPage, "default": DefaultPage}},
+		map[string]any{"name": "page_size", "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": 1, "maximum": MaxPageSize, "default": DefaultPageSize}},
+	}
+}
+
+func stockPoolIDParameter() map[string]any {
+	return map[string]any{
+		"name": "id", "in": "path", "required": true,
+		"schema": map[string]any{"type": "integer", "format": "int64", "minimum": 1, "example": 1},
+	}
+}
+
+func stockPoolResponses(description string) map[string]any {
+	return map[string]any{
+		"200": jsonReferenceResponse(description, "#/components/schemas/StockPool"),
+		"400": errorResponse("股票池参数无效"),
+		"404": errorResponse("股票池不存在"),
+		"405": errorResponse("请求方法不被允许"),
+		"503": errorResponse("股票池数据不可用"),
+	}
+}
+
+func stockPoolListResponses() map[string]any {
+	return map[string]any{
+		"200": jsonReferenceResponse("股票池列表", "#/components/schemas/StockPoolListResponse"),
+		"400": errorResponse("搜索或分页参数无效"),
+		"405": errorResponse("请求方法不被允许"),
+		"503": errorResponse("股票池数据不可用"),
+	}
+}
+
 func stockValuationResponse() map[string]any {
 	return map[string]any{
 		"description": "股票估值、历史分位与同业中位数",
@@ -592,6 +669,9 @@ func apiComponents() map[string]any {
 			"ScreenerRankingResult":          screenerRankingResultSchema(),
 			"ScreenerFieldResult":            screenerFieldResultSchema(),
 			"ScreenerSource":                 screenerSourceSchema(),
+			"StockPoolCreateRequest":         stockPoolCreateRequestSchema(),
+			"StockPool":                      stockPoolSchema(),
+			"StockPoolListResponse":          stockPoolListResponseSchema(),
 		},
 	}
 }
@@ -1069,6 +1149,42 @@ func screenerListResponseSchema() map[string]any {
 		"type": "object", "required": []string{"data", "pagination"},
 		"properties": map[string]any{
 			"data":       map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/Screener"}},
+			"pagination": map[string]any{"$ref": "#/components/schemas/PaginationMeta"},
+		},
+	}
+}
+
+func stockPoolCreateRequestSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"name"}, "additionalProperties": false,
+		"description": "仅允许名称和可空描述；id、source、member_count、created_at、updated_at 均由服务端生成。名称和描述会去除首尾空白。",
+		"properties": map[string]any{
+			"name":        map[string]any{"type": "string", "minLength": 1, "maxLength": 100},
+			"description": map[string]any{"type": "string", "maxLength": 500, "nullable": true},
+		},
+	}
+}
+
+func stockPoolSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"id", "name", "description", "source", "member_count", "created_at", "updated_at"},
+		"properties": map[string]any{
+			"id":           map[string]any{"type": "integer", "format": "int64", "minimum": 1},
+			"name":         map[string]any{"type": "string", "example": "红利观察"},
+			"description":  map[string]any{"type": "string", "nullable": true, "example": "仅供长期观察。"},
+			"source":       map[string]any{"type": "string", "enum": []string{"manual"}},
+			"member_count": map[string]any{"type": "integer", "format": "int64", "minimum": 0, "description": "POL-001 尚未提供成员写入，真实值为 0；POL-002 写入后必须由持久化关系计算或同一事务维护。"},
+			"created_at":   map[string]any{"type": "string", "format": "date-time"},
+			"updated_at":   map[string]any{"type": "string", "format": "date-time"},
+		},
+	}
+}
+
+func stockPoolListResponseSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"data", "pagination"},
+		"properties": map[string]any{
+			"data":       map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/StockPool"}},
 			"pagination": map[string]any{"$ref": "#/components/schemas/PaginationMeta"},
 		},
 	}

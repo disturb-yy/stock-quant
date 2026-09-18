@@ -23,6 +23,7 @@
 | `internal/market` | 行情数据领域 |
 | `internal/analysis` | 股票分析领域 |
 | `internal/screener` | 量化选股执行领域 |
+| `internal/pool` | 股票池创建、搜索、列表与概览领域 |
 | `internal/auth` | 身份认证与授权领域 |
 | `internal/health` | 跨领域健康 HTTP 接口适配 |
 | `internal/migration` | 数据库 migration 命名与执行边界 |
@@ -102,6 +103,22 @@ internal/analysis/
 internal/screener/
 ```
 
+### pool
+
+负责：
+
+- 股票池身份与手工来源。
+- 股票池创建、名称搜索、稳定分页和概览读取。
+- 股票池 MySQL migration 与 Demo Seed。
+
+不负责成员管理、Screener 来源写入、共享权限或动态规则。
+
+入口：
+
+```text
+internal/pool/
+```
+
 ### auth
 
 负责：
@@ -139,6 +156,8 @@ internal/auth/
 | 修改量化选股执行规则 | `internal/screener/domain`、`internal/screener/service.go` |
 | 修改保存选股方案 | `internal/screener/domain/saved.go`、`internal/screener/saved_service.go`、`internal/screener/saved_handler.go` |
 | 修改量化选股 MySQL 快照或方案持久化 | `internal/screener/infrastructure/mysql.go`、`internal/screener/infrastructure/mysql_saved.go` |
+| 修改股票池创建、列表或详情 | `internal/pool/service.go`、`internal/pool/handler.go` |
+| 修改股票池 MySQL 持久化或 Seed | `internal/pool/infrastructure/mysql.go` |
 | 修改登录流程 | `internal/auth` |
 | 修改启动和依赖注入 | `cmd/server` |
 | 修改本地 demo fixture 或 seed | `internal/demo`、`cmd/seed` |

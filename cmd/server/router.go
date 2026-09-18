@@ -10,6 +10,7 @@ import (
 	"github.com/disturb-yy/stock-quant/internal/demo"
 	"github.com/disturb-yy/stock-quant/internal/health"
 	"github.com/disturb-yy/stock-quant/internal/market"
+	"github.com/disturb-yy/stock-quant/internal/pool"
 	"github.com/disturb-yy/stock-quant/internal/screener"
 	"github.com/disturb-yy/stock-quant/internal/stock"
 	"github.com/disturb-yy/stock-quant/pkg/api"
@@ -126,10 +127,10 @@ func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuat
 }, valuationReader interface {
 	Valuation(context.Context, stock.ValuationRequest) (stock.StockValuation, error)
 }, statusReaders ...demo.StatusReader) *gin.Engine {
-	return newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, nil, nil, statusReaders...)
+	return newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreenerAndStockPools(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, nil, nil, nil, statusReaders...)
 }
 
-func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger *slog.Logger, overviewReader interface {
+func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreenerAndStockPools(applicationLogger *slog.Logger, overviewReader interface {
 	Overview(context.Context) (market.MarketOverview, error)
 }, sectorReader interface {
 	Sectors(context.Context) (market.MarketSectors, error)
@@ -147,7 +148,7 @@ func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuat
 	Valuation(context.Context, stock.ValuationRequest) (stock.StockValuation, error)
 }, screenerReader interface {
 	Run(context.Context, screener.ScreenerRunRequest) (screener.ScreenerRunResponse, error)
-}, savedScreenerReader screener.SavedScreenerQuery, statusReaders ...demo.StatusReader) *gin.Engine {
+}, savedScreenerReader screener.SavedScreenerQuery, stockPoolReader pool.StockPoolQuery, statusReaders ...demo.StatusReader) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(logger.GinMiddleware(applicationLogger), gin.CustomRecovery(apiV1RecoveryHandler))
@@ -168,6 +169,7 @@ func newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuat
 	stock.RegisterValuationRoutes(apiV1, valuationReader)
 	screener.RegisterRoutes(apiV1, screenerReader)
 	screener.RegisterSavedRoutes(apiV1, savedScreenerReader)
+	pool.RegisterRoutes(apiV1, stockPoolReader)
 	if len(statusReaders) > 0 {
 		demo.RegisterRoutes(apiV1, statusReaders[0])
 	}
@@ -288,10 +290,10 @@ func newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndVa
 }, valuationReader interface {
 	Valuation(context.Context, stock.ValuationRequest) (stock.StockValuation, error)
 }, statusReaders ...demo.StatusReader) *http.Server {
-	return newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger, address, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, nil, nil, statusReaders...)
+	return newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreenerAndStockPools(applicationLogger, address, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, nil, nil, nil, statusReaders...)
 }
 
-func newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger *slog.Logger, address string, overviewReader interface {
+func newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreenerAndStockPools(applicationLogger *slog.Logger, address string, overviewReader interface {
 	Overview(context.Context) (market.MarketOverview, error)
 }, sectorReader interface {
 	Sectors(context.Context) (market.MarketSectors, error)
@@ -309,10 +311,10 @@ func newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndVa
 	Valuation(context.Context, stock.ValuationRequest) (stock.StockValuation, error)
 }, screenerReader interface {
 	Run(context.Context, screener.ScreenerRunRequest) (screener.ScreenerRunResponse, error)
-}, savedScreenerReader screener.SavedScreenerQuery, statusReaders ...demo.StatusReader) *http.Server {
+}, savedScreenerReader screener.SavedScreenerQuery, stockPoolReader pool.StockPoolQuery, statusReaders ...demo.StatusReader) *http.Server {
 	return &http.Server{
 		Addr:    address,
-		Handler: newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreener(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, screenerReader, savedScreenerReader, statusReaders...),
+		Handler: newRouterWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreenerAndStockPools(applicationLogger, overviewReader, sectorReader, signalReader, rankingReader, stockOverviewReader, barsReader, financialsReader, valuationReader, screenerReader, savedScreenerReader, stockPoolReader, statusReaders...),
 	}
 }
 
