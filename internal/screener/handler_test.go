@@ -95,3 +95,28 @@ func TestRegisterRoutesWithServiceMapsValidationAndEmptyResult(t *testing.T) {
 		t.Fatalf("invalid status = %d, want 400", invalidResponse.Code)
 	}
 }
+
+func TestRegisterRoutesWithServiceSerializesMissingIndustriesAsEmptyArray(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	value := "10"
+	service, err := NewService(&fakeSnapshotReader{input: domain.ExecutionInput{
+		Universe: domain.Universe{ID: domain.ActiveAShareUniverse, Name: domain.ActiveAShareName},
+		Eligible: []domain.Candidate{{Symbol: "A.SH", Name: "甲", Values: map[string]domain.Observation{"technical.close": {Value: &value}}}},
+		Snapshot: domain.Snapshot{AsOf: "2024-06-28", FieldAsOf: map[string]string{"technical.close": "2024-06-28"}},
+		Source:   domain.Source{Mode: "demo", Provider: "mysql-demo-fixture", SeedVersion: "v1", AsOf: "2024-06-28"},
+	}})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	router := gin.New()
+	RegisterRoutes(router.Group("/api/v1"), service)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/screeners/run", strings.NewReader(`{"spec":{"universe_id":"cn_a_share_active","filters":[],"ranking":{"field_id":"technical.close","direction":"desc"},"top_n":1}}`))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"industries":[]`) {
+		t.Fatalf("body = %s, want industries to be an empty array", response.Body.String())
+	}
+}

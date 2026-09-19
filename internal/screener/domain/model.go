@@ -353,7 +353,7 @@ func Execute(spec ScreenerSpec, input ExecutionInput) (ExecutionResult, error) {
 	results := make([]ResultRow, 0, len(candidates))
 	for index, candidate := range candidates {
 		results = append(results, ResultRow{
-			Symbol: candidate.Symbol, Name: candidate.Name, Industries: append([]string(nil), candidate.Industries...), Rank: index + 1,
+			Symbol: candidate.Symbol, Name: candidate.Name, Industries: append([]string{}, candidate.Industries...), Rank: index + 1,
 			Ranking: resultForField(normalized.Ranking.FieldID, candidate.Values[normalized.Ranking.FieldID], definition),
 			Fields:  fieldsForCandidate(candidate, normalized.Filters, normalized.Ranking.FieldID),
 		})
