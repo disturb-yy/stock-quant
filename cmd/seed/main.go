@@ -10,6 +10,7 @@ import (
 	"github.com/disturb-yy/stock-quant/internal/demo"
 	"github.com/disturb-yy/stock-quant/internal/demo/infrastructure"
 	poolinfrastructure "github.com/disturb-yy/stock-quant/internal/pool/infrastructure"
+	researchinfrastructure "github.com/disturb-yy/stock-quant/internal/research/infrastructure"
 	screenerinfrastructure "github.com/disturb-yy/stock-quant/internal/screener/infrastructure"
 	"github.com/disturb-yy/stock-quant/pkg/config"
 )
@@ -39,6 +40,10 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	researchStore, err := researchinfrastructure.NewMySQLResearchStore(database)
+	if err != nil {
+		return err
+	}
 	if err := store.Migrate(ctx); err != nil {
 		return err
 	}
@@ -46,6 +51,9 @@ func run(ctx context.Context) error {
 		return err
 	}
 	if err := stockPoolStore.Migrate(ctx); err != nil {
+		return err
+	}
+	if err := researchStore.Migrate(ctx); err != nil {
 		return err
 	}
 	fixture := demo.DemoFixture()
@@ -57,6 +65,9 @@ func run(ctx context.Context) error {
 		return err
 	}
 	if err := stockPoolStore.SeedDemo(ctx); err != nil {
+		return err
+	}
+	if err := researchStore.SeedDemo(ctx); err != nil {
 		return err
 	}
 	snapshot, err := store.ReadDemoSnapshot(ctx)

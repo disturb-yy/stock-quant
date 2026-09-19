@@ -6,7 +6,7 @@
 
 ## Role
 
-使用本地配置将 FND-003 版本化 fixture 与 POL-001 演示手工股票池幂等写入 MySQL。
+使用本地配置将 FND-003 版本化 fixture、POL-001 演示手工股票池与 RES-001 两个演示 Research 项目幂等写入 MySQL。
 
 ## Usage
 

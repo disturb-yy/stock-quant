@@ -16,6 +16,8 @@ import (
 	marketinfrastructure "github.com/disturb-yy/stock-quant/internal/market/infrastructure"
 	"github.com/disturb-yy/stock-quant/internal/pool"
 	poolinfrastructure "github.com/disturb-yy/stock-quant/internal/pool/infrastructure"
+	"github.com/disturb-yy/stock-quant/internal/research"
+	researchinfrastructure "github.com/disturb-yy/stock-quant/internal/research/infrastructure"
 	"github.com/disturb-yy/stock-quant/internal/screener"
 	screenerinfrastructure "github.com/disturb-yy/stock-quant/internal/screener/infrastructure"
 	"github.com/disturb-yy/stock-quant/internal/stock"
@@ -68,7 +70,12 @@ func run(ctx context.Context) error {
 		applicationLogger.Error("initialize stock pool store", "error", err)
 		return err
 	}
-	if err := initializeMigrations(ctx, demoStore, applicationLogger, savedScreenerStore, stockPoolStore); err != nil {
+	researchStore, err := researchinfrastructure.NewMySQLResearchStore(database)
+	if err != nil {
+		applicationLogger.Error("initialize research store", "error", err)
+		return err
+	}
+	if err := initializeMigrations(ctx, demoStore, applicationLogger, savedScreenerStore, stockPoolStore, researchStore); err != nil {
 		applicationLogger.Error("initialize database migrations", "error", err)
 		return err
 	}
@@ -165,12 +172,17 @@ func run(ctx context.Context) error {
 		applicationLogger.Error("initialize stock pool service", "error", err)
 		return err
 	}
+	researchService, err := research.NewService(researchStore)
+	if err != nil {
+		applicationLogger.Error("initialize research service", "error", err)
+		return err
+	}
 	barsService, err := market.NewBarsService(overviewReader, providerSelection)
 	if err != nil {
 		applicationLogger.Error("initialize stock bars service", "error", err)
 		return err
 	}
-	server := newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreenerAndStockPools(applicationLogger, httpAddress, overviewService, sectorService, signalService, rankingService, stockService, barsService, financialsService, valuationService, screenerService, savedScreenerService, stockPoolService, statusReader)
+	server := newHTTPServerWithMarketSignalsAndRankingsAndStocksAndBarsAndFinancialsAndValuationAndScreenerAndStockPoolsAndResearch(applicationLogger, httpAddress, overviewService, sectorService, signalService, rankingService, stockService, barsService, financialsService, valuationService, screenerService, savedScreenerService, stockPoolService, researchService, statusReader)
 	applicationLogger.Info("HTTP server starting", "address", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		applicationLogger.Error("HTTP server stopped", "error", err)

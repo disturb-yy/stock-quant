@@ -34,7 +34,7 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if document.Info.Version != "v1" {
 		t.Fatalf("info.version = %q, want %q", document.Info.Version, "v1")
 	}
-	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/stocks/{symbol}", "/api/v1/stocks/{symbol}/bars", "/api/v1/stocks/{symbol}/financials", "/api/v1/stocks/{symbol}/valuation", "/api/v1/openapi.json"} {
+	for _, path := range []string{"/api/v1/health", "/api/v1/markets/overview", "/api/v1/markets/sectors", "/api/v1/markets/signals", "/api/v1/markets/rankings", "/api/v1/stocks/{symbol}", "/api/v1/stocks/{symbol}/bars", "/api/v1/stocks/{symbol}/financials", "/api/v1/stocks/{symbol}/valuation", "/api/v1/research", "/api/v1/research/{id}", "/api/v1/openapi.json"} {
 		if _, ok := document.Paths[path]; !ok {
 			t.Fatalf("OpenAPI paths missing %q", path)
 		}
@@ -42,10 +42,50 @@ func TestOpenAPIDocumentContainsStableContract(t *testing.T) {
 	if _, ok := document.Paths["/api/v1/dev/demo-status"]; !ok {
 		t.Fatal("OpenAPI paths missing development demo status")
 	}
-	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult", "MarketRankings", "MarketRanking", "StockOverview", "StockQuote", "StockMetrics", "StockMetric", "StockSparkline", "StockSparklinePoint", "StockBars", "StockBar", "StockEffectiveRange", "StockBenchmark", "StockBenchmarkPoint", "StockFinancials", "StockFinancialSummary", "StockFinancialReport", "StockFinancialIncome", "StockFinancialBalance", "StockFinancialCashFlow", "StockFinancialIndicators", "StockFinancialSource", "StockValuation", "StockValuationMetrics", "StockValuationMetric", "StockValuationCurrent", "StockValuationPoint", "StockValuationPercentile", "StockIndustry", "StockIndustryComparison", "StockIndustryComparisonMetrics", "StockIndustryMetric", "StockValuationSource"} {
+	for _, schema := range []string{"Response", "ErrorResponse", "PaginationRequest", "PaginationMeta", "PaginatedResponse", "HealthResponse", "DemoCounts", "DemoSampleStock", "DemoStatus", "MarketOverview", "MarketSectors", "MarketSector", "SectorLeader", "MarketDataSource", "MarketIndex", "MarketBreadth", "MarketTurnover", "MarketSignals", "SignalParameters", "SignalResult", "MarketRankings", "MarketRanking", "StockOverview", "StockQuote", "StockMetrics", "StockMetric", "StockSparkline", "StockSparklinePoint", "StockBars", "StockBar", "StockEffectiveRange", "StockBenchmark", "StockBenchmarkPoint", "StockFinancials", "StockFinancialSummary", "StockFinancialReport", "StockFinancialIncome", "StockFinancialBalance", "StockFinancialCashFlow", "StockFinancialIndicators", "StockFinancialSource", "StockValuation", "StockValuationMetrics", "StockValuationMetric", "StockValuationCurrent", "StockValuationPoint", "StockValuationPercentile", "StockIndustry", "StockIndustryComparison", "StockIndustryComparisonMetrics", "StockIndustryMetric", "StockValuationSource", "ResearchCreateRequest", "ResearchProject", "ResearchListResponse"} {
 		if _, ok := document.Components.Schemas[schema]; !ok {
 			t.Fatalf("OpenAPI schemas missing %q", schema)
 		}
+	}
+}
+
+func TestOpenAPIResearchContract(t *testing.T) {
+	document := OpenAPIDocument()
+	paths := document["paths"].(map[string]any)
+	collection := paths["/api/v1/research"].(map[string]any)
+	create := collection["post"].(map[string]any)
+	if create["operationId"] != "createResearchProject" {
+		t.Fatalf("research create operation = %#v, want createResearchProject", create["operationId"])
+	}
+	list := collection["get"].(map[string]any)
+	if list["operationId"] != "listResearchProjects" {
+		t.Fatalf("research list operation = %#v, want listResearchProjects", list["operationId"])
+	}
+	listResponses := list["responses"].(map[string]any)
+	for _, status := range []string{"200", "400", "405", "503"} {
+		if _, ok := listResponses[status]; !ok {
+			t.Fatalf("research list responses missing %s", status)
+		}
+	}
+	detail := paths["/api/v1/research/{id}"].(map[string]any)["get"].(map[string]any)
+	detailResponses := detail["responses"].(map[string]any)
+	for _, status := range []string{"200", "400", "404", "405", "503"} {
+		if _, ok := detailResponses[status]; !ok {
+			t.Fatalf("research detail responses missing %s", status)
+		}
+	}
+	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
+	request := schemas["ResearchCreateRequest"].(map[string]any)
+	if request["additionalProperties"] != false {
+		t.Fatal("ResearchCreateRequest must reject unknown fields")
+	}
+	project := schemas["ResearchProject"].(map[string]any)["properties"].(map[string]any)
+	if project["description"].(map[string]any)["nullable"] != true {
+		t.Fatal("ResearchProject.description must be nullable")
+	}
+	listSchema := schemas["ResearchListResponse"].(map[string]any)["properties"].(map[string]any)
+	if listSchema["pagination"].(map[string]any)["$ref"] != "#/components/schemas/PaginationMeta" {
+		t.Fatal("ResearchListResponse must reuse PaginationMeta")
 	}
 }
 

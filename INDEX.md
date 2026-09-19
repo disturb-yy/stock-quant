@@ -24,6 +24,7 @@
 | `internal/analysis` | 股票分析领域 |
 | `internal/screener` | 量化选股执行领域 |
 | `internal/pool` | 股票池创建、搜索、列表与概览领域 |
+| `internal/research` | Research 项目创建、最近列表与基础元数据领域 |
 | `internal/auth` | 身份认证与授权领域 |
 | `internal/health` | 跨领域健康 HTTP 接口适配 |
 | `internal/migration` | 数据库 migration 命名与执行边界 |
@@ -119,6 +120,22 @@ internal/screener/
 internal/pool/
 ```
 
+### research
+
+负责：
+
+- Research 项目身份与基础元数据。
+- Research 项目创建、最近更新时间排序列表和详情读取。
+- Research 项目 MySQL migration 与 Demo Seed。
+
+不负责 Pool Universe、Notes、自动保存、Strategy 或协作共享。
+
+入口：
+
+```text
+internal/research/
+```
+
 ### auth
 
 负责：
@@ -158,6 +175,7 @@ internal/auth/
 | 修改量化选股 MySQL 快照或方案持久化 | `internal/screener/infrastructure/mysql.go`、`internal/screener/infrastructure/mysql_saved.go` |
 | 修改股票池创建、列表或详情 | `internal/pool/service.go`、`internal/pool/handler.go` |
 | 修改股票池 MySQL 持久化或 Seed | `internal/pool/infrastructure/mysql.go` |
+| 修改 Research 项目创建、最近列表或详情 | `internal/research/service.go`、`internal/research/handler.go`、`internal/research/infrastructure/mysql.go` |
 | 修改登录流程 | `internal/auth` |
 | 修改启动和依赖注入 | `cmd/server` |
 | 修改本地 demo fixture 或 seed | `internal/demo`、`cmd/seed` |

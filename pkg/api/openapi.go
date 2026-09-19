@@ -42,6 +42,8 @@ func apiPaths(includeDevelopment bool) map[string]any {
 		"/api/v1/stock-pools/{id}/summary":          stockPoolSummaryPath(),
 		"/api/v1/stock-pools/{id}/members":          stockPoolMembersPath(),
 		"/api/v1/stock-pools/{id}/members/{symbol}": stockPoolMemberBySymbolPath(),
+		"/api/v1/research":                          researchPath(),
+		"/api/v1/research/{id}":                     researchByIDPath(),
 		"/api/v1/openapi.json":                      openAPIPath(),
 	}
 	if includeDevelopment {
@@ -795,6 +797,9 @@ func apiComponents() map[string]any {
 			"StockPoolMemberListResponse":    stockPoolMemberListResponseSchema(),
 			"StockPoolMemberAddResponse":     stockPoolMemberAddResponseSchema(),
 			"StockPoolMemberDeleteResponse":  stockPoolMemberDeleteResponseSchema(),
+			"ResearchCreateRequest":          researchCreateRequestSchema(),
+			"ResearchProject":                researchProjectSchema(),
+			"ResearchListResponse":           researchListResponseSchema(),
 		},
 	}
 }
@@ -1272,6 +1277,111 @@ func screenerListResponseSchema() map[string]any {
 		"type": "object", "required": []string{"data", "pagination"},
 		"properties": map[string]any{
 			"data":       map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/Screener"}},
+			"pagination": map[string]any{"$ref": "#/components/schemas/PaginationMeta"},
+		},
+	}
+}
+
+func researchPath() map[string]any {
+	return map[string]any{
+		"post": map[string]any{
+			"operationId": "createResearchProject",
+			"summary":     "创建 Research 项目",
+			"requestBody": researchRequestBody(),
+			"responses": map[string]any{
+				"200": jsonReferenceResponse("新建 Research 项目", "#/components/schemas/ResearchProject"),
+				"400": errorResponse("Research 项目参数无效"),
+				"405": errorResponse("请求方法不被允许"),
+				"503": errorResponse("Research 数据不可用"),
+			},
+		},
+		"get": map[string]any{
+			"operationId": "listResearchProjects",
+			"summary":     "按最近更新时间分页读取最近 Research 项目",
+			"description": "固定按 updated_at DESC、id DESC 排序，不支持客户端指定排序字段。空列表仍返回 200 和 data 数组。",
+			"parameters":  researchPaginationParameters(),
+			"responses": map[string]any{
+				"200": jsonReferenceResponse("最近 Research 项目列表", "#/components/schemas/ResearchListResponse"),
+				"400": errorResponse("分页参数无效"),
+				"405": errorResponse("请求方法不被允许"),
+				"503": errorResponse("Research 数据不可用"),
+			},
+		},
+	}
+}
+
+func researchByIDPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "getResearchProject",
+			"summary":     "读取 Research 项目基础元数据",
+			"parameters":  []any{researchIDParameter()},
+			"responses": map[string]any{
+				"200": jsonReferenceResponse("Research 项目", "#/components/schemas/ResearchProject"),
+				"400": errorResponse("Research 项目 ID 无效"),
+				"404": errorResponse("Research 项目不存在"),
+				"405": errorResponse("请求方法不被允许"),
+				"503": errorResponse("Research 数据不可用"),
+			},
+		},
+	}
+}
+
+func researchRequestBody() map[string]any {
+	return map[string]any{
+		"required": true,
+		"content": map[string]any{
+			"application/json": map[string]any{
+				"schema":  map[string]any{"$ref": "#/components/schemas/ResearchCreateRequest"},
+				"example": map[string]any{"name": "平安银行估值研究", "description": "记录估值与行业判断。"},
+			},
+		},
+	}
+}
+
+func researchIDParameter() map[string]any {
+	return map[string]any{
+		"name": "id", "in": "path", "required": true,
+		"schema": map[string]any{"type": "integer", "format": "int64", "minimum": 1, "example": 1},
+	}
+}
+
+func researchPaginationParameters() []any {
+	return []any{
+		map[string]any{"name": "page", "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": DefaultPage, "default": DefaultPage}},
+		map[string]any{"name": "page_size", "in": "query", "required": false, "schema": map[string]any{"type": "integer", "minimum": 1, "maximum": MaxPageSize, "default": DefaultPageSize}},
+	}
+}
+
+func researchCreateRequestSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"name"}, "additionalProperties": false,
+		"description": "仅允许名称和可空描述；id、created_at、updated_at 由服务端生成。名称和描述会去除首尾空白。",
+		"properties": map[string]any{
+			"name":        map[string]any{"type": "string", "minLength": 1, "maxLength": 100},
+			"description": map[string]any{"type": "string", "maxLength": 500, "nullable": true},
+		},
+	}
+}
+
+func researchProjectSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"id", "name", "description", "created_at", "updated_at"},
+		"properties": map[string]any{
+			"id":          map[string]any{"type": "integer", "format": "int64", "minimum": 1},
+			"name":        map[string]any{"type": "string", "example": "平安银行估值研究"},
+			"description": map[string]any{"type": "string", "nullable": true, "example": "记录估值与行业判断。"},
+			"created_at":  map[string]any{"type": "string", "format": "date-time"},
+			"updated_at":  map[string]any{"type": "string", "format": "date-time"},
+		},
+	}
+}
+
+func researchListResponseSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"data", "pagination"},
+		"properties": map[string]any{
+			"data":       map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/ResearchProject"}},
 			"pagination": map[string]any{"$ref": "#/components/schemas/PaginationMeta"},
 		},
 	}
