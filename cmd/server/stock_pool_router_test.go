@@ -29,6 +29,10 @@ func (fakeStockPoolReader) Get(context.Context, int64) (domain.StockPool, error)
 	return routerStockPool(), nil
 }
 
+func (fakeStockPoolReader) Summary(context.Context, int64) (domain.StockPoolSummary, error) {
+	return domain.StockPoolSummary{ID: 1, Source: domain.StockPoolSourceSummary{Type: domain.SourceManual}}, nil
+}
+
 func (fakeStockPoolReader) ListMembers(context.Context, int64, pool.StockPoolMemberListRequest) (pool.StockPoolMemberListResponse, error) {
 	return pool.StockPoolMemberListResponse{}, nil
 }
@@ -61,7 +65,7 @@ func TestServerRouterRegistersStockPoolRoutes(t *testing.T) {
 		t.Fatalf("POST status/body = %d/%s", response.StatusCode, body)
 	}
 
-	for _, path := range []string{"/api/v1/stock-pools?q=%E6%B5%8B%E8%AF%95", "/api/v1/stock-pools/1", "/api/v1/stock-pools/1/members", "/api/v1/openapi.json"} {
+	for _, path := range []string{"/api/v1/stock-pools?q=%E6%B5%8B%E8%AF%95", "/api/v1/stock-pools/1", "/api/v1/stock-pools/1/summary", "/api/v1/stock-pools/1/members", "/api/v1/openapi.json"} {
 		response, err := server.Client().Get(server.URL + path)
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)

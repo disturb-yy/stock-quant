@@ -39,6 +39,7 @@ func apiPaths(includeDevelopment bool) map[string]any {
 		"/api/v1/screeners/run":                     screenerRunPath(),
 		"/api/v1/stock-pools":                       stockPoolsPath(),
 		"/api/v1/stock-pools/{id}":                  stockPoolByIDPath(),
+		"/api/v1/stock-pools/{id}/summary":          stockPoolSummaryPath(),
 		"/api/v1/stock-pools/{id}/members":          stockPoolMembersPath(),
 		"/api/v1/stock-pools/{id}/members/{symbol}": stockPoolMemberBySymbolPath(),
 		"/api/v1/openapi.json":                      openAPIPath(),
@@ -485,6 +486,18 @@ func stockPoolByIDPath() map[string]any {
 	}
 }
 
+func stockPoolSummaryPath() map[string]any {
+	return map[string]any{
+		"get": map[string]any{
+			"operationId": "getStockPoolSummary",
+			"summary":     "读取股票池来源与基础画像摘要",
+			"description": "来源只读取真实持久化事实；行业、PE、ROE 分别公开 availability、as_of、provenance 和不可用原因。",
+			"parameters":  []any{stockPoolIDParameter()},
+			"responses":   stockPoolSummaryResponses(),
+		},
+	}
+}
+
 func stockPoolMembersPath() map[string]any {
 	return map[string]any{
 		"get": map[string]any{
@@ -564,6 +577,16 @@ func stockPoolResponses(description string) map[string]any {
 		"404": errorResponse("股票池不存在"),
 		"405": errorResponse("请求方法不被允许"),
 		"503": errorResponse("股票池数据不可用"),
+	}
+}
+
+func stockPoolSummaryResponses() map[string]any {
+	return map[string]any{
+		"200": jsonReferenceResponse("股票池来源与基础画像摘要", "#/components/schemas/StockPoolSummary"),
+		"400": errorResponse("股票池参数无效"),
+		"404": errorResponse("股票池不存在"),
+		"405": errorResponse("请求方法不被允许"),
+		"503": errorResponse("股票池画像数据不可用"),
 	}
 }
 
@@ -761,6 +784,11 @@ func apiComponents() map[string]any {
 			"ScreenerSource":                 screenerSourceSchema(),
 			"StockPoolCreateRequest":         stockPoolCreateRequestSchema(),
 			"StockPool":                      stockPoolSchema(),
+			"StockPoolSummary":               stockPoolSummarySchema(),
+			"StockPoolSummarySource":         stockPoolSummarySourceSchema(),
+			"StockPoolIndustrySummary":       stockPoolIndustrySummarySchema(),
+			"StockPoolIndustryBucket":        stockPoolIndustryBucketSchema(),
+			"StockPoolMetricSummary":         stockPoolMetricSummarySchema(),
 			"StockPoolListResponse":          stockPoolListResponseSchema(),
 			"StockPoolMember":                stockPoolMemberSchema(),
 			"StockPoolMemberAddRequest":      stockPoolMemberAddRequestSchema(),
@@ -1271,6 +1299,74 @@ func stockPoolSchema() map[string]any {
 			"member_count": map[string]any{"type": "integer", "format": "int64", "minimum": 0, "description": "由 t_stock_pool_member 持久化关系实时计算。"},
 			"created_at":   map[string]any{"type": "string", "format": "date-time"},
 			"updated_at":   map[string]any{"type": "string", "format": "date-time"},
+		},
+	}
+}
+
+func stockPoolSummarySchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"id", "name", "description", "source", "member_count", "created_at", "updated_at", "industry", "pe", "roe"},
+		"properties": map[string]any{
+			"id":           map[string]any{"type": "integer", "format": "int64", "minimum": 1},
+			"name":         map[string]any{"type": "string"},
+			"description":  map[string]any{"type": "string", "nullable": true},
+			"source":       map[string]any{"$ref": "#/components/schemas/StockPoolSummarySource"},
+			"member_count": map[string]any{"type": "integer", "format": "int64", "minimum": 0, "description": "由真实成员关系计算。"},
+			"created_at":   map[string]any{"type": "string", "format": "date-time"},
+			"updated_at":   map[string]any{"type": "string", "format": "date-time"},
+			"industry":     map[string]any{"$ref": "#/components/schemas/StockPoolIndustrySummary"},
+			"pe":           map[string]any{"$ref": "#/components/schemas/StockPoolMetricSummary"},
+			"roe":          map[string]any{"$ref": "#/components/schemas/StockPoolMetricSummary"},
+		},
+	}
+}
+
+func stockPoolSummarySourceSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"type", "reference", "created_at"},
+		"properties": map[string]any{
+			"type":       map[string]any{"type": "string", "enum": []string{"manual", "screener"}, "description": "screener 仅在 SCR-003 已真实写入来源 metadata 时出现。"},
+			"reference":  map[string]any{"type": "string", "nullable": true, "description": "已持久化且可安全公开的来源引用；手工非 Seed Pool 可为空。"},
+			"created_at": map[string]any{"type": "string", "format": "date-time"},
+		},
+	}
+}
+
+func stockPoolIndustrySummarySchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"availability", "distribution", "as_of", "provenance", "unavailable_reason"},
+		"properties": map[string]any{
+			"availability":       map[string]any{"type": "string", "enum": []string{"available", "empty", "unavailable"}},
+			"distribution":       map[string]any{"type": "array", "nullable": true, "items": map[string]any{"$ref": "#/components/schemas/StockPoolIndustryBucket"}},
+			"as_of":              map[string]any{"type": "string", "format": "date", "nullable": true, "description": "行业关系当前没有独立日期字段时为 null。"},
+			"provenance":         map[string]any{"type": "string", "nullable": true, "example": "sector_memberships"},
+			"unavailable_reason": map[string]any{"type": "string", "nullable": true},
+		},
+	}
+}
+
+func stockPoolIndustryBucketSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"code", "name", "member_count"},
+		"properties": map[string]any{
+			"code":         map[string]any{"type": "string"},
+			"name":         map[string]any{"type": "string"},
+			"member_count": map[string]any{"type": "integer", "format": "int64", "minimum": 1},
+		},
+	}
+}
+
+func stockPoolMetricSummarySchema() map[string]any {
+	return map[string]any{
+		"type": "object", "required": []string{"availability", "value", "sample_size", "as_of", "basis", "provenance", "unavailable_reason"},
+		"properties": map[string]any{
+			"availability":       map[string]any{"type": "string", "enum": []string{"available", "empty", "unavailable"}},
+			"value":              map[string]any{"type": "string", "nullable": true, "description": "有效成员的算术平均值，保持十进制字符串精度。"},
+			"sample_size":        map[string]any{"type": "integer", "format": "int64", "minimum": 0},
+			"as_of":              map[string]any{"type": "string", "format": "date", "nullable": true},
+			"basis":              map[string]any{"type": "string", "nullable": true},
+			"provenance":         map[string]any{"type": "string", "nullable": true, "example": "financial_metrics"},
+			"unavailable_reason": map[string]any{"type": "string", "nullable": true},
 		},
 	}
 }

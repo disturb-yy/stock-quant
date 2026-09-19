@@ -344,8 +344,8 @@ SELECT id, name, description, source, created_at, updated_at,
        (SELECT COUNT(*) FROM t_stock_pool_member WHERE pool_id = t_stock_pool.id) AS member_count
 FROM t_stock_pool`
 
-func readStockPool(ctx context.Context, db *sql.DB, id int64) (domain.StockPool, error) {
-	return scanStockPool(db.QueryRowContext(ctx, stockPoolSelect+` WHERE id = ?`, id))
+func readStockPool(ctx context.Context, queryer queryRowContext, id int64) (domain.StockPool, error) {
+	return scanStockPool(queryer.QueryRowContext(ctx, stockPoolSelect+` WHERE id = ?`, id))
 }
 
 type rowScanner interface {

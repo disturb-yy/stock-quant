@@ -17,6 +17,7 @@ import (
 const (
 	stockPoolsPath              = "/stock-pools"
 	stockPoolIDPath             = "/stock-pools/:id"
+	stockPoolSummaryPath        = "/stock-pools/:id/summary"
 	stockPoolMembersPath        = "/stock-pools/:id/members"
 	stockPoolMemberBySymbolPath = "/stock-pools/:id/members/:symbol"
 )
@@ -38,6 +39,7 @@ func RegisterRoutes(router *gin.RouterGroup, query StockPoolQuery) {
 	router.POST(stockPoolsPath, createStockPoolHandler(query))
 	router.GET(stockPoolsPath, listStockPoolsHandler(query))
 	router.GET(stockPoolIDPath, getStockPoolHandler(query))
+	router.GET(stockPoolSummaryPath, getStockPoolSummaryHandler(query))
 	router.GET(stockPoolMembersPath, listStockPoolMembersHandler(query))
 	router.POST(stockPoolMembersPath, addStockPoolMemberHandler(query))
 	router.DELETE(stockPoolMemberBySymbolPath, deleteStockPoolMemberHandler(query))
@@ -85,6 +87,22 @@ func getStockPoolHandler(query StockPoolQuery) gin.HandlerFunc {
 			return
 		}
 		result, err := query.Get(context.Request.Context(), id)
+		if err != nil {
+			writeStockPoolError(context, err)
+			return
+		}
+		context.JSON(http.StatusOK, result)
+	}
+}
+
+func getStockPoolSummaryHandler(query StockPoolQuery) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		id, err := parseStockPoolID(context.Param("id"))
+		if err != nil {
+			writeStockPoolError(context, err)
+			return
+		}
+		result, err := query.Summary(context.Request.Context(), id)
 		if err != nil {
 			writeStockPoolError(context, err)
 			return

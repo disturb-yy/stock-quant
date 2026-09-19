@@ -24,6 +24,8 @@ type fakeStockPoolQuery struct {
 	createErr    error
 	listErr      error
 	getErr       error
+	summary      domain.StockPoolSummary
+	summaryErr   error
 	membersErr   error
 	addErr       error
 	deleteErr    error
@@ -48,6 +50,10 @@ func (query *fakeStockPoolQuery) Get(context.Context, int64) (domain.StockPool, 
 	return query.created, query.getErr
 }
 
+func (query *fakeStockPoolQuery) Summary(context.Context, int64) (domain.StockPoolSummary, error) {
+	return query.summary, query.summaryErr
+}
+
 func (query *fakeStockPoolQuery) ListMembers(_ context.Context, id int64, request StockPoolMemberListRequest) (StockPoolMemberListResponse, error) {
 	query.memberID, query.membersReq = id, request
 	return query.members, query.membersErr
@@ -65,7 +71,7 @@ func (query *fakeStockPoolQuery) DeleteMember(_ context.Context, id int64, symbo
 
 func TestRegisterRoutesSupportsCreateListAndDetail(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	query := &fakeStockPoolQuery{created: testStockPool(1), list: StockPoolListResponse{Data: []domain.StockPool{testStockPool(1)}}}
+	query := &fakeStockPoolQuery{created: testStockPool(1), list: StockPoolListResponse{Data: []domain.StockPool{testStockPool(1)}}, summary: testStockPoolSummary(1)}
 	router := gin.New()
 	RegisterRoutes(router.Group("/api/v1"), query)
 
@@ -89,6 +95,12 @@ func TestRegisterRoutesSupportsCreateListAndDetail(t *testing.T) {
 	router.ServeHTTP(detailResponse, httptest.NewRequest(http.MethodGet, "/api/v1/stock-pools/1", nil))
 	if detailResponse.Code != http.StatusOK || !strings.Contains(detailResponse.Body.String(), `"id":1`) {
 		t.Fatalf("detail status = %d, body = %s", detailResponse.Code, detailResponse.Body.String())
+	}
+
+	summaryResponse := httptest.NewRecorder()
+	router.ServeHTTP(summaryResponse, httptest.NewRequest(http.MethodGet, "/api/v1/stock-pools/1/summary", nil))
+	if summaryResponse.Code != http.StatusOK || !strings.Contains(summaryResponse.Body.String(), `"type":"manual"`) {
+		t.Fatalf("summary status = %d, body = %s", summaryResponse.Code, summaryResponse.Body.String())
 	}
 
 	membersResponse := httptest.NewRecorder()
@@ -126,6 +138,8 @@ func TestRegisterRoutesRejectsServerOwnedFieldsAndMapsErrors(t *testing.T) {
 		{name: "invalid id", method: http.MethodGet, path: "/api/v1/stock-pools/nope", query: &fakeStockPoolQuery{}, statusCode: http.StatusBadRequest, code: api.CodeValidation},
 		{name: "not found", method: http.MethodGet, path: "/api/v1/stock-pools/1", query: &fakeStockPoolQuery{getErr: domain.ErrStockPoolNotFound}, statusCode: http.StatusNotFound, code: api.CodeNotFound},
 		{name: "dependency", method: http.MethodGet, path: "/api/v1/stock-pools/1", query: &fakeStockPoolQuery{getErr: errors.New("database unavailable")}, statusCode: http.StatusServiceUnavailable, code: api.CodeDependencyUnavailable},
+		{name: "summary not found", method: http.MethodGet, path: "/api/v1/stock-pools/1/summary", query: &fakeStockPoolQuery{summaryErr: domain.ErrStockPoolNotFound}, statusCode: http.StatusNotFound, code: api.CodeNotFound},
+		{name: "summary dependency", method: http.MethodGet, path: "/api/v1/stock-pools/1/summary", query: &fakeStockPoolQuery{summaryErr: errors.New("database unavailable")}, statusCode: http.StatusServiceUnavailable, code: api.CodeDependencyUnavailable},
 		{name: "member conflict", method: http.MethodPost, path: "/api/v1/stock-pools/1/members", body: `{"symbol":"000001.SZ"}`, query: &fakeStockPoolQuery{addErr: domain.ErrStockPoolMemberConflict}, statusCode: http.StatusConflict, code: api.CodeConflict},
 		{name: "member missing", method: http.MethodDelete, path: "/api/v1/stock-pools/1/members/000001.SZ", query: &fakeStockPoolQuery{deleteErr: domain.ErrStockPoolMemberNotFound}, statusCode: http.StatusNotFound, code: api.CodeNotFound},
 	}
@@ -152,4 +166,8 @@ func TestRegisterRoutesRejectsServerOwnedFieldsAndMapsErrors(t *testing.T) {
 
 func testStockPool(id int64) domain.StockPool {
 	return domain.StockPool{ID: id, Name: "红利观察", Source: domain.SourceManual, MemberCount: 0, CreatedAt: time.Unix(0, 0).UTC(), UpdatedAt: time.Unix(0, 0).UTC()}
+}
+
+func testStockPoolSummary(id int64) domain.StockPoolSummary {
+	return domain.StockPoolSummary{ID: id, Name: "红利观察", Source: domain.StockPoolSourceSummary{Type: domain.SourceManual}}
 }

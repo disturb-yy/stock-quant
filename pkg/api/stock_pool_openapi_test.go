@@ -5,7 +5,7 @@ import "testing"
 func TestOpenAPIStockPoolContract(t *testing.T) {
 	document := OpenAPIDocument(false)
 	paths := document["paths"].(map[string]any)
-	for _, path := range []string{"/api/v1/stock-pools", "/api/v1/stock-pools/{id}"} {
+	for _, path := range []string{"/api/v1/stock-pools", "/api/v1/stock-pools/{id}", "/api/v1/stock-pools/{id}/summary"} {
 		if _, ok := paths[path]; !ok {
 			t.Fatalf("OpenAPI missing stock pool path %q", path)
 		}
@@ -24,7 +24,7 @@ func TestOpenAPIStockPoolContract(t *testing.T) {
 		t.Fatal("stock pool list must publish stable sort and search semantics")
 	}
 	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
-	for _, name := range []string{"StockPoolCreateRequest", "StockPool", "StockPoolListResponse", "StockPoolMember", "StockPoolMemberAddRequest", "StockPoolMemberListResponse", "StockPoolMemberAddResponse", "StockPoolMemberDeleteResponse"} {
+	for _, name := range []string{"StockPoolCreateRequest", "StockPool", "StockPoolSummary", "StockPoolSummarySource", "StockPoolIndustrySummary", "StockPoolIndustryBucket", "StockPoolMetricSummary", "StockPoolListResponse", "StockPoolMember", "StockPoolMemberAddRequest", "StockPoolMemberListResponse", "StockPoolMemberAddResponse", "StockPoolMemberDeleteResponse"} {
 		if _, ok := schemas[name]; !ok {
 			t.Fatalf("OpenAPI missing stock pool schema %q", name)
 		}
@@ -39,6 +39,17 @@ func TestOpenAPIStockPoolContract(t *testing.T) {
 	}
 	if _, ok := paths["/api/v1/stock-pools/{id}"].(map[string]any)["get"].(map[string]any)["responses"].(map[string]any)["404"]; !ok {
 		t.Fatal("stock pool detail must publish not found response")
+	}
+	summary := paths["/api/v1/stock-pools/{id}/summary"].(map[string]any)["get"].(map[string]any)
+	if summary["operationId"] != "getStockPoolSummary" {
+		t.Fatalf("stock pool summary operation = %#v", summary["operationId"])
+	}
+	if _, ok := summary["responses"].(map[string]any)["503"]; !ok {
+		t.Fatal("stock pool summary must publish dependency response")
+	}
+	summarySource := schemas["StockPoolSummarySource"].(map[string]any)["properties"].(map[string]any)["type"].(map[string]any)
+	if len(summarySource["enum"].([]string)) != 2 {
+		t.Fatalf("summary source types = %#v, want manual/screener", summarySource["enum"])
 	}
 	members := paths["/api/v1/stock-pools/{id}/members"].(map[string]any)
 	if _, ok := members["get"].(map[string]any); !ok {

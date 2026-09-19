@@ -22,6 +22,8 @@ type fakeStockPoolStore struct {
 	member       domain.StockPoolMember
 	memberCount  int64
 	memberErr    error
+	summary      domain.StockPoolSummary
+	summaryErr   error
 	memberID     int64
 	memberSymbol string
 }
@@ -44,6 +46,10 @@ func (store *fakeStockPoolStore) List(_ context.Context, search string, page, pa
 
 func (store *fakeStockPoolStore) Get(_ context.Context, id int64) (domain.StockPool, error) {
 	return domain.StockPool{ID: id}, nil
+}
+
+func (store *fakeStockPoolStore) Summary(_ context.Context, _ int64) (domain.StockPoolSummary, error) {
+	return store.summary, store.summaryErr
 }
 
 func (store *fakeStockPoolStore) ListMembers(_ context.Context, id int64, page, pageSize int) ([]domain.StockPoolMember, int64, error) {
@@ -137,6 +143,31 @@ func TestServiceManagesMembersWithRealIdentityChecks(t *testing.T) {
 	deleted, err := service.DeleteMember(context.Background(), 7, "000001.SZ")
 	if err != nil || deleted.Symbol != "000001.SZ" || deleted.MemberCount != 1 {
 		t.Fatalf("DeleteMember() = %#v/%v", deleted, err)
+	}
+}
+
+func TestServiceSummaryReturnsPersistedProfile(t *testing.T) {
+	want := domain.StockPoolSummary{ID: 7, MemberCount: 1, Source: domain.StockPoolSourceSummary{Type: domain.SourceManual}}
+	service, err := NewService(&fakeStockPoolStore{summary: want}, &fakeStockIdentityReader{exists: true})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	got, err := service.Summary(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("Summary() error = %v", err)
+	}
+	if got.ID != want.ID || got.Source.Type != domain.SourceManual || got.MemberCount != want.MemberCount {
+		t.Fatalf("Summary() = %#v, want %#v", got, want)
+	}
+}
+
+func TestServiceSummaryRejectsInvalidID(t *testing.T) {
+	service, err := NewService(&fakeStockPoolStore{}, &fakeStockIdentityReader{exists: true})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if _, err := service.Summary(context.Background(), 0); err == nil {
+		t.Fatal("Summary() error = nil, want invalid id")
 	}
 }
 

@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/disturb-yy/stock-quant/internal/demo"
+	demoinfrastructure "github.com/disturb-yy/stock-quant/internal/demo/infrastructure"
 	"github.com/disturb-yy/stock-quant/internal/pool"
 	"github.com/disturb-yy/stock-quant/internal/pool/domain"
 	stockinfrastructure "github.com/disturb-yy/stock-quant/internal/stock/infrastructure"
@@ -45,6 +47,16 @@ func TestMySQLStockPoolStore(t *testing.T) {
         ON DUPLICATE KEY UPDATE name = VALUES(name)`); err != nil {
 		t.Fatalf("seed instrument fixture: %v", err)
 	}
+	demoStore, err := demoinfrastructure.NewStore(database)
+	if err != nil {
+		t.Fatalf("initialize demo store: %v", err)
+	}
+	if err := demoStore.Migrate(context.Background()); err != nil {
+		t.Fatalf("demo migration: %v", err)
+	}
+	if err := demoStore.SeedDemo(context.Background(), demo.DemoFixture()); err != nil {
+		t.Fatalf("demo seed: %v", err)
+	}
 	store, err := NewMySQLStockPoolStore(database)
 	if err != nil {
 		t.Fatalf("NewMySQLStockPoolStore() error = %v", err)
@@ -72,6 +84,13 @@ func TestMySQLStockPoolStore(t *testing.T) {
 	demoPools, err := service.List(context.Background(), pool.StockPoolListRequest{Search: "演示手工股票池"})
 	if err != nil || len(demoPools.Data) != 1 || demoPools.Data[0].MemberCount != 1 {
 		t.Fatalf("demo pools = %#v, error = %v, want one member", demoPools, err)
+	}
+	demoSummary, err := service.Summary(context.Background(), demoPools.Data[0].ID)
+	if err != nil {
+		t.Fatalf("read demo stock pool summary: %v", err)
+	}
+	if demoSummary.Source.Type != domain.SourceManual || demoSummary.Source.Reference == nil || *demoSummary.Source.Reference != demoSeedKey {
+		t.Fatalf("demo summary source = %#v, want persisted manual seed reference", demoSummary.Source)
 	}
 	name := fmt.Sprintf("集成测试池-%d", time.Now().UnixNano())
 	created, err := service.Create(context.Background(), domain.StockPoolInput{Name: name + "-1"})
@@ -106,9 +125,26 @@ func TestMySQLStockPoolStore(t *testing.T) {
 	if loaded.Name != name+"-1" || loaded.Source != domain.SourceManual || loaded.MemberCount != 0 {
 		t.Fatalf("loaded pool = %#v, want persisted metadata", loaded)
 	}
+	emptySummary, err := service.Summary(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("read empty stock pool summary: %v", err)
+	}
+	if emptySummary.MemberCount != 0 || emptySummary.Industry.Availability != domain.SummaryEmpty || emptySummary.PE.Availability != domain.SummaryEmpty || emptySummary.ROE.Availability != domain.SummaryEmpty {
+		t.Fatalf("empty summary = %#v, want explicit empty availability", emptySummary)
+	}
 	added, err := service.AddMember(context.Background(), created.ID, "000001.SZ")
 	if err != nil || added.Member.Symbol != "000001.SZ" || added.Member.Name != "平安银行" || added.MemberCount != 1 {
 		t.Fatalf("added member = %#v, error = %v", added, err)
+	}
+	populatedSummary, err := service.Summary(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("read populated stock pool summary: %v", err)
+	}
+	if populatedSummary.MemberCount != 1 || populatedSummary.Industry.Availability != domain.SummaryAvailable || populatedSummary.PE.Availability != domain.SummaryAvailable || populatedSummary.ROE.Availability != domain.SummaryAvailable {
+		t.Fatalf("populated summary = %#v, want available persisted aggregates", populatedSummary)
+	}
+	if populatedSummary.PE.Value == nil || *populatedSummary.PE.Value != "5.82" || populatedSummary.PE.AsOf == nil || *populatedSummary.PE.AsOf != demo.SeedAsOf {
+		t.Fatalf("populated PE summary = %#v, want demo value and as-of", populatedSummary.PE)
 	}
 	if _, err := service.AddMember(context.Background(), created.ID, "000001.SZ"); !errors.Is(err, domain.ErrStockPoolMemberConflict) {
 		t.Fatalf("duplicate member error = %v, want conflict", err)

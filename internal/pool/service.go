@@ -16,6 +16,7 @@ type StockPoolStore interface {
 	Create(context.Context, domain.StockPool) (domain.StockPool, error)
 	List(context.Context, string, int, int) ([]domain.StockPool, int64, error)
 	Get(context.Context, int64) (domain.StockPool, error)
+	Summary(context.Context, int64) (domain.StockPoolSummary, error)
 	ListMembers(context.Context, int64, int, int) ([]domain.StockPoolMember, int64, error)
 	AddMember(context.Context, int64, string) (domain.StockPoolMember, int64, error)
 	DeleteMember(context.Context, int64, string) (int64, error)
@@ -31,6 +32,7 @@ type StockPoolQuery interface {
 	Create(context.Context, domain.StockPoolInput) (domain.StockPool, error)
 	List(context.Context, StockPoolListRequest) (StockPoolListResponse, error)
 	Get(context.Context, int64) (domain.StockPool, error)
+	Summary(context.Context, int64) (domain.StockPoolSummary, error)
 	ListMembers(context.Context, int64, StockPoolMemberListRequest) (StockPoolMemberListResponse, error)
 	AddMember(context.Context, int64, string) (StockPoolMemberAddResponse, error)
 	DeleteMember(context.Context, int64, string) (StockPoolMemberDeleteResponse, error)
@@ -126,6 +128,18 @@ func (service *Service) Get(ctx context.Context, id int64) (domain.StockPool, er
 		return domain.StockPool{}, fmt.Errorf("get stock pool: %w", err)
 	}
 	return pool, nil
+}
+
+// Summary 读取 Pool 元数据、来源和基础画像的一致性快照。
+func (service *Service) Summary(ctx context.Context, id int64) (domain.StockPoolSummary, error) {
+	if id < 1 {
+		return domain.StockPoolSummary{}, &domain.ValidationError{Fields: map[string]string{"id": "必须是大于等于 1 的整数"}}
+	}
+	summary, err := service.store.Summary(ctx, id)
+	if err != nil {
+		return domain.StockPoolSummary{}, fmt.Errorf("get stock pool summary: %w", err)
+	}
+	return summary, nil
 }
 
 // ListMembers 读取股票池中的真实成员并按 symbol 稳定分页。

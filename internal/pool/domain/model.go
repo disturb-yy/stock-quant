@@ -22,11 +22,15 @@ type Source string
 const (
 	// SourceManual 表示由用户显式创建的股票池。
 	SourceManual Source = "manual"
+	// SourceScreener 仅表示 SCR-003 已真实持久化的筛选来源。
+	SourceScreener Source = "screener"
 )
 
 var ErrStockPoolNotFound = errors.New("stock pool not found")
 
 var (
+	// ErrStockPoolSourceMetadataUnavailable 表示来源字段缺少可追溯的真实元数据。
+	ErrStockPoolSourceMetadataUnavailable = errors.New("stock pool source metadata unavailable")
 	// ErrStockPoolMemberNotFound 表示指定成员不在股票池中。
 	ErrStockPoolMemberNotFound = errors.New("stock pool member not found")
 	// ErrStockPoolMemberConflict 表示成员已存在于股票池中。
