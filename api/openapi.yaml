@@ -1,0 +1,444 @@
+openapi: 3.0.3
+info:
+  title: Stock Quant Data Sync API
+  version: 0.2.0
+  description: A 股数据同步任务与单只股票数据查询 API。
+servers:
+  - url: /
+paths:
+  /api/v1/stock/data/sync-tasks:
+    post:
+      operationId: createSyncTask
+      summary: 创建异步数据同步任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSyncTaskRequest'
+      responses:
+        '202':
+          description: 任务已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncTask'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '409':
+          $ref: '#/components/responses/SyncTaskConflict'
+        '503':
+          $ref: '#/components/responses/DataSourceUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      operationId: listSyncTasks
+      summary: 分页查询同步任务
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 同步任务列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncTaskList'
+        '400':
+          $ref: '#/components/responses/InvalidPagination'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/stock/data/sync-tasks/{task_id}:
+    get:
+      operationId: getSyncTask
+      summary: 查询同步任务详情
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      responses:
+        '200':
+          description: 同步任务详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncTask'
+        '404':
+          $ref: '#/components/responses/SyncTaskNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/stock/data/sync-tasks/{task_id}/retry:
+    post:
+      operationId: retrySyncTaskExplicit
+      summary: 手动重试失败任务
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      responses:
+        '202':
+          description: 重试任务已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncTask'
+        '404':
+          $ref: '#/components/responses/SyncTaskNotFound'
+        '409':
+          $ref: '#/components/responses/SyncTaskRetryConflict'
+        '503':
+          $ref: '#/components/responses/DataSourceUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/stocks/{symbol}/data:
+    get:
+      operationId: getStockData
+      summary: 查询单只 A 股已同步数据
+      parameters:
+        - $ref: '#/components/parameters/StockSymbol'
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+      responses:
+        '200':
+          description: 单只股票数据与可用性
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockData'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '404':
+          $ref: '#/components/responses/StockNotFound'
+        '503':
+          $ref: '#/components/responses/DataSourceUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+components:
+  parameters:
+    TaskID:
+      name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 10
+    StockSymbol:
+      name: symbol
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9]{6}\.(SH|SZ|BJ)$'
+      description: A 股标识，例如 600519.SH、000001.SZ 或 830001.BJ。
+    StartDate:
+      name: start_date
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+      description: 与 end_date 成对提供；缺省时查询最近 30 个已同步交易日。
+    EndDate:
+      name: end_date
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+      description: 与 start_date 成对提供，且不得早于 start_date。
+  responses:
+    InvalidRequest:
+      description: 请求参数无效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InvalidPagination:
+      description: 分页参数无效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    SyncTaskConflict:
+      description: 同步目标已有运行中的任务
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    SyncTaskNotFound:
+      description: 同步任务不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    SyncTaskRetryConflict:
+      description: 任务不可重试或同步目标冲突
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    StockNotFound:
+      description: 无法识别为 A 股标识
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    DataSourceUnavailable:
+      description: 数据源不可用
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalServerError:
+      description: 内部服务错误，不暴露实现细节
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    CreateSyncTaskRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - target
+      properties:
+        target:
+          type: string
+          enum: [basic_info, daily_bars, all]
+        start_date:
+          type: string
+          format: date
+          nullable: true
+          description: daily_bars 或 all 必填；basic_info 不允许提供。
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          description: daily_bars 或 all 必填；basic_info 不允许提供。
+    SyncTask:
+      type: object
+      required:
+        - task_id
+        - target
+        - trigger
+        - status
+        - source
+        - start_date
+        - end_date
+        - data_as_of
+        - updated_at
+        - created_at
+        - started_at
+        - finished_at
+        - retry_count
+        - max_retries
+        - failure_reason
+        - result
+        - retry_of_task_id
+      properties:
+        task_id:
+          type: string
+        target:
+          type: string
+          enum: [basic_info, daily_bars, all]
+        trigger:
+          type: string
+          enum: [manual, scheduled]
+        status:
+          type: string
+          enum: [pending, running, retrying, succeeded, failed]
+        source:
+          $ref: '#/components/schemas/Source'
+        start_date:
+          type: string
+          format: date
+          nullable: true
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        data_as_of:
+          type: string
+          format: date
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        retry_count:
+          type: integer
+          minimum: 0
+        max_retries:
+          type: integer
+          minimum: 0
+        failure_reason:
+          type: string
+          nullable: true
+        result:
+          allOf:
+            - $ref: '#/components/schemas/SyncResult'
+          nullable: true
+        retry_of_task_id:
+          type: string
+          nullable: true
+    Source:
+      type: object
+      required: [provider, mode]
+      properties:
+        provider:
+          type: string
+          enum: [tushare, mock]
+        mode:
+          type: string
+          enum: [external, mock]
+    SyncResult:
+      type: object
+      required: [processed_count, created_count, updated_count, failed_count]
+      properties:
+        processed_count:
+          type: integer
+          minimum: 0
+        created_count:
+          type: integer
+          minimum: 0
+        updated_count:
+          type: integer
+          minimum: 0
+        failed_count:
+          type: integer
+          minimum: 0
+    SyncTaskList:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncTask'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    StockData:
+      type: object
+      required: [symbol, basic_info, daily_bars, availability, source, updated_at, data_as_of]
+      properties:
+        symbol:
+          type: string
+        basic_info:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/StockBasicInfo'
+        daily_bars:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockDailyBar'
+        availability:
+          $ref: '#/components/schemas/StockDataAvailability'
+        source:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Source'
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        data_as_of:
+          type: string
+          format: date
+          nullable: true
+    StockBasicInfo:
+      type: object
+      required: [symbol, name, market, status]
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        market:
+          type: string
+          enum: [SH, SZ, BJ]
+        status:
+          type: string
+    StockDailyBar:
+      type: object
+      required: [trade_date, open, high, low, close, volume]
+      properties:
+        trade_date:
+          type: string
+          format: date
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: number
+    StockDataAvailability:
+      type: object
+      required: [basic_info, daily_bars]
+      properties:
+        basic_info:
+          type: string
+          enum: [available, empty]
+        daily_bars:
+          type: string
+          enum: [available, empty]
+    Pagination:
+      type: object
+      required: [page, page_size, total]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 50
+        total:
+          type: integer
+          minimum: 0
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - INVALID_REQUEST
+            - INVALID_PAGINATION
+            - SYNC_TASK_NOT_FOUND
+            - SYNC_TASK_CONFLICT
+            - SYNC_TASK_NOT_RETRYABLE
+            - STOCK_NOT_FOUND
+            - DATA_SOURCE_UNAVAILABLE
+            - INTERNAL_SERVER_ERROR
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true
