@@ -1,0 +1,1 @@
+{"code":0,"msg":"","data":{"fields":["trade_date","close","ts_code","open","high","low","pre_close","change","pct_chg","vol","amount","ah_vol","ah_amount","future_field"],"items":[["20261009",10.123456,"600000.SH",10.0,10.5,9.9,9.8,0.323456,3.3,12500.5,12500.5,null,null,"ignored"]]}}

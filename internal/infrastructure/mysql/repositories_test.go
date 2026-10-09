@@ -3,12 +3,13 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
-	"math"
 	"strings"
 	"testing"
 	"time"
 
+	"stock-quant/internal/infrastructure/tushare"
 	"stock-quant/internal/market/domain"
 	"stock-quant/internal/shared/types"
 )
@@ -40,19 +41,19 @@ func TestDailyPriceUpsertRevisionAndStableQueryOrderMySQL(t *testing.T) {
 	if len(got) != 2 || got[0].TradeDate != older || got[1].TradeDate != newer {
 		t.Fatalf("daily rows are not in ascending trade-date order: %#v", got)
 	}
-	if got[1].Revision != 1 || got[1].AmountYuan.Float64() != 12500500.25 || got[1].VolumeLot != 12500.5 {
-		t.Fatalf("stored amount/volume/revision = (%v, %v, %d)", got[1].AmountYuan.Float64(), got[1].VolumeLot, got[1].Revision)
+	if got[1].Revision != 1 || got[1].AmountYuan.String() != "12500500.25" || got[1].VolumeLot.String() != "12500.5" {
+		t.Fatalf("stored amount/volume/revision = (%s, %s, %d)", got[1].AmountYuan.String(), got[1].VolumeLot.String(), got[1].Revision)
 	}
 
 	changed := first
-	changed.Close = 10.35
+	changed.Close = decimalValue(t, "10.35")
 	changed.SourceHash = sourceHash('c')
 	changed.FetchedAt = first.FetchedAt.Add(time.Minute)
 	if err := repository.Upsert(ctx, []domain.DailyPrice{changed}); err != nil {
 		t.Fatalf("changed upsert: %v", err)
 	}
 	got, err = repository.ListByCode(ctx, "000001.SZ", newer, newer)
-	if err != nil || len(got) != 1 || got[0].Revision != 2 || got[0].Close != changed.Close {
+	if err != nil || len(got) != 1 || got[0].Revision != 2 || got[0].Close.String() != changed.Close.String() {
 		t.Fatalf("changed row = %#v, error %v; want close=%v revision=2", got, err, changed.Close)
 	}
 
@@ -63,6 +64,84 @@ func TestDailyPriceUpsertRevisionAndStableQueryOrderMySQL(t *testing.T) {
 	got, err = repository.ListByCode(ctx, "000001.SZ", newer, newer)
 	if err != nil || len(got) != 1 || got[0].Revision != 2 {
 		t.Fatalf("fetched_at-only change must not increment revision: rows=%#v err=%v", got, err)
+	}
+}
+
+func TestMarketDecimalTextRoundTripsAndRevisionIsStableMySQL(t *testing.T) {
+	db := openIsolatedMySQL(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	migrateForRepositoryTest(t, ctx, db)
+	dailyRepository, err := NewDailyPriceRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	factorRepository, err := NewAdjFactorRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	date := tradingDate(t, "2026-06-03")
+	metadata := tushare.MappingMetadata{FetchedAt: fixedFetchedAt(), SourceHash: sourceHash('a')}
+	bar, err := tushare.MapDailyPrice(tushare.Row{
+		"ts_code": json.RawMessage(`"000001.SZ"`), "trade_date": json.RawMessage(`"20260603"`),
+		"open": json.RawMessage(`10.000001`), "high": json.RawMessage(`10.000002`),
+		"low": json.RawMessage(`9.999999`), "close": json.RawMessage(`10.000001`),
+		"vol": json.RawMessage(`12500.5000`), "amount": json.RawMessage(`9007199254740.993`),
+	}, metadata)
+	if err != nil {
+		t.Fatalf("map exact daily provider decimals: %v", err)
+	}
+	factor, err := tushare.MapAdjFactor(tushare.Row{
+		"ts_code": json.RawMessage(`"000001.SZ"`), "trade_date": json.RawMessage(`"20260603"`), "adj_factor": json.RawMessage(`1.2345678901`),
+	}, tushare.MappingMetadata{FetchedAt: fixedFetchedAt(), SourceHash: sourceHash('b')})
+	if err != nil {
+		t.Fatalf("map exact adjustment factor: %v", err)
+	}
+	if err := dailyRepository.Upsert(ctx, []domain.DailyPrice{bar}); err != nil {
+		t.Fatalf("upsert exact daily decimals: %v", err)
+	}
+	if err := factorRepository.Upsert(ctx, []domain.AdjFactor{factor}); err != nil {
+		t.Fatalf("upsert exact adjustment factor: %v", err)
+	}
+	assertDecimalText := func(table, code, column, want string) {
+		t.Helper()
+		var got string
+		if err := db.QueryRowContext(ctx, "SELECT CAST("+column+" AS CHAR) FROM "+table+" WHERE ts_code=? AND trade_date=?", code, date.String()).Scan(&got); err != nil {
+			t.Fatalf("read exact %s.%s text: %v", table, column, err)
+		}
+		if got != want {
+			t.Fatalf("stored %s.%s = %q, want exact %q", table, column, got, want)
+		}
+	}
+	assertDecimalText("t_daily_price", bar.TSCode, "amount_yuan", "9007199254740993.0000")
+	assertDecimalText("t_daily_price", bar.TSCode, "open", "10.000001")
+	assertDecimalText("t_daily_price", bar.TSCode, "volume_lot", "12500.5000")
+	assertDecimalText("t_adj_factor", factor.TSCode, "adj_factor", "1.2345678901")
+	loadedDaily, err := dailyRepository.ListByCode(ctx, bar.TSCode, date, date)
+	if err != nil || len(loadedDaily) != 1 || loadedDaily[0].AmountYuan.String() != "9007199254740993" || loadedDaily[0].Open.String() != "10.000001" {
+		t.Fatalf("repository exact daily read = %#v, error = %v", loadedDaily, err)
+	}
+	loadedFactors, err := factorRepository.ListByCode(ctx, factor.TSCode, date, date)
+	if err != nil || len(loadedFactors) != 1 || loadedFactors[0].Factor.String() != "1.2345678901" {
+		t.Fatalf("repository exact adjustment-factor read = %#v, error = %v", loadedFactors, err)
+	}
+	bar.FetchedAt = bar.FetchedAt.Add(time.Second)
+	factor.FetchedAt = factor.FetchedAt.Add(time.Second)
+	if err := dailyRepository.Upsert(ctx, []domain.DailyPrice{bar}); err != nil {
+		t.Fatalf("re-upsert exact daily decimals: %v", err)
+	}
+	if err := factorRepository.Upsert(ctx, []domain.AdjFactor{factor}); err != nil {
+		t.Fatalf("re-upsert exact adjustment factor: %v", err)
+	}
+	var dailyRevision, factorRevision int
+	if err := db.QueryRowContext(ctx, "SELECT revision FROM t_daily_price WHERE ts_code=? AND trade_date=?", bar.TSCode, date.String()).Scan(&dailyRevision); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT revision FROM t_adj_factor WHERE ts_code=? AND trade_date=?", factor.TSCode, date.String()).Scan(&factorRevision); err != nil {
+		t.Fatal(err)
+	}
+	if dailyRevision != 1 || factorRevision != 1 {
+		t.Fatalf("unchanged decimal revisions = daily %d, factor %d; want both 1", dailyRevision, factorRevision)
 	}
 }
 
@@ -82,20 +161,20 @@ func TestAdjFactorUpsertRevisionAndCalendarOrderMySQL(t *testing.T) {
 
 	firstDate := tradingDate(t, "2026-06-03")
 	secondDate := tradingDate(t, "2026-06-04")
-	factor := domain.AdjFactor{TSCode: "000001.SZ", TradeDate: firstDate, Factor: 1.2345678901, SourceHash: sourceHash('d'), FetchedAt: fixedFetchedAt()}
-	if err := adjRepository.Upsert(ctx, []domain.AdjFactor{factor, {TSCode: "000001.SZ", TradeDate: secondDate, Factor: 1.25, SourceHash: sourceHash('e'), FetchedAt: fixedFetchedAt()}}); err != nil {
+	factor := domain.AdjFactor{TSCode: "000001.SZ", TradeDate: firstDate, Factor: decimalValue(t, "1.2345678901"), SourceHash: sourceHash('d'), FetchedAt: fixedFetchedAt()}
+	if err := adjRepository.Upsert(ctx, []domain.AdjFactor{factor, {TSCode: "000001.SZ", TradeDate: secondDate, Factor: decimalValue(t, "1.25"), SourceHash: sourceHash('e'), FetchedAt: fixedFetchedAt()}}); err != nil {
 		t.Fatalf("adj factor upsert: %v", err)
 	}
 	if err := adjRepository.Upsert(ctx, []domain.AdjFactor{factor}); err != nil {
 		t.Fatalf("repeated adj factor upsert: %v", err)
 	}
-	factor.Factor = 1.5
+	factor.Factor = decimalValue(t, "1.5")
 	factor.SourceHash = sourceHash('f')
 	if err := adjRepository.Upsert(ctx, []domain.AdjFactor{factor}); err != nil {
 		t.Fatalf("changed adj factor upsert: %v", err)
 	}
 	factors, err := adjRepository.ListByCode(ctx, "000001.SZ", firstDate, secondDate)
-	if err != nil || len(factors) != 2 || factors[0].TradeDate != firstDate || factors[0].Revision != 2 || factors[0].Factor != 1.5 {
+	if err != nil || len(factors) != 2 || factors[0].TradeDate != firstDate || factors[0].Revision != 2 || factors[0].Factor.String() != "1.5" {
 		t.Fatalf("adj factors = %#v err=%v; want sorted rows with revised first factor", factors, err)
 	}
 
@@ -261,10 +340,9 @@ func TestMarketRepositoryRejectsValuesThatMySQLWouldRound(t *testing.T) {
 		name   string
 		change func(*domain.DailyPrice)
 	}{
-		{name: "amount scale", change: func(row *domain.DailyPrice) { row.AmountYuan = amount(t, 0.00001) }},
-		{name: "price precision", change: func(row *domain.DailyPrice) { row.Close = 100000000000000.0 }},
-		{name: "NaN price", change: func(row *domain.DailyPrice) { row.Close = math.NaN() }},
-		{name: "non-finite price", change: func(row *domain.DailyPrice) { row.Close = math.Inf(1) }},
+		{name: "amount scale", change: func(row *domain.DailyPrice) { row.AmountYuan = amountDecimal(t, "0.00001") }},
+		{name: "price precision", change: func(row *domain.DailyPrice) { row.Close = decimalValue(t, "100000000000000") }},
+		{name: "zero value decimal", change: func(row *domain.DailyPrice) { row.Close = types.Decimal{} }},
 		{name: "invalid row hash", change: func(row *domain.DailyPrice) { row.SourceHash = strings.Repeat("z", 64) }},
 	}
 	for _, test := range tests {
@@ -289,19 +367,32 @@ func migrateForRepositoryTest(t *testing.T, ctx context.Context, db *sql.DB) {
 func dailyPrice(t *testing.T, code string, date types.TradingDate, hashMarker byte) domain.DailyPrice {
 	t.Helper()
 	return domain.DailyPrice{
-		TSCode: code, TradeDate: date, Open: 10.1, High: 10.5, Low: 9.9, Close: 10.25,
-		AmountYuan: amount(t, 12500500.25), VolumeLot: 12500.5,
+		TSCode: code, TradeDate: date, Open: decimalValue(t, "10.1"), High: decimalValue(t, "10.5"), Low: decimalValue(t, "9.9"), Close: decimalValue(t, "10.25"),
+		AmountYuan: amountDecimal(t, "12500500.25"), VolumeLot: decimalValue(t, "12500.5"),
 		SourceHash: sourceHash(hashMarker), FetchedAt: fixedFetchedAt(),
 	}
 }
 
-func amount(t *testing.T, value float64) types.AmountYuan {
+func amountDecimal(t *testing.T, value string) types.AmountYuan {
 	t.Helper()
-	amount, err := types.NewAmountYuan(value)
+	decimal, err := types.ParseDecimal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	amount, err := types.NewAmountYuanDecimal(decimal)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return amount
+}
+
+func decimalValue(t *testing.T, value string) types.Decimal {
+	t.Helper()
+	decimal, err := types.ParseDecimal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return decimal
 }
 
 func tradingDate(t *testing.T, value string) types.TradingDate {

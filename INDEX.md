@@ -6,13 +6,13 @@
 | 本地环境/版本 | `docs/environment-setup.md`, `Makefile`, `.env.example` | 首次设置或环境问题 |
 | 测试与 CI | `docs/testing.md`, `.github/workflows/ci.yml`, `tools/check.sh` | 本地/合并前质量验证 |
 | 跨语言 JSON 协议与 DTO | `contracts/`, `python/stockquant/protocol.py` | P01/P08 请求与响应校验、编码和解码 |
-| 通用交易日期与元金额 | `internal/shared/types/` | 日期格式互转、显式时区提取、金额有限值校验 |
+| 通用交易日期与精确数值 | `internal/shared/types/` | 日期格式互转、精确十进制 JSON/SQL、DECIMAL 校验、显式 float64 计算边界 |
 | 稳定错误分类 | `internal/shared/apperror/` | 跨层错误码与 cause 链 |
 | 市场/因子/选股/回测 ports | `internal/market/ports/`, `internal/factor/ports/`, `internal/screening/ports/`, `internal/backtest/ports/` | 应用与行情、同步任务、因子执行及运行结果存储的接口边界 |
 | Go CLI 与 Composition Root | `cmd/stockquant/`, `internal/app/` | 命令入口、用例组装 |
 | 市场与策略领域 | `internal/market/domain/`, `internal/factor/domain/`, `internal/strategy/momentum/domain/` | P02 行情实体、P06/P07 因子与策略 |
 | 选股与回测领域 | `internal/screening/domain/`, `internal/backtest/domain/` | P06/P07/P10 |
-| 技术适配器 | `internal/infrastructure/` | MySQL 仓储/迁移、Tushare HTTP 动态响应/限流/重试客户端、Python Runner、scheduler |
+| 技术适配器 | `internal/infrastructure/` | MySQL 精确 DECIMAL 仓储/迁移、Tushare HTTP/DTO/映射/限流/重试、Python Runner、scheduler |
 | 项目目标及边界 | `docs/01-requirements.md` | 每次开始前 |
 | Go/Python 体系结构 | `docs/02-architecture.md` | package、依赖设计 |
 | 四因子精确定义 | `docs/03-strategy-spec.md` | 因子、过滤、评分、回测 |

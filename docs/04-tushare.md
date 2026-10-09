@@ -27,9 +27,14 @@ POST `https://api.tushare.pro`（如证书或地址文档更新，使用配置�
 
 ## 单位与字段转换
 - `trade_date`: `YYYYMMDD` → `DATE` (Asia/Shanghai 交易日期)；`ts_code` 保留 `.SH/.SZ` 后缀。
-- `daily.amount`: 千元 × 1000 -> `amount_yuan`。`daily.vol` 单位手，不要当股；如转股数需 ×100，但不强依赖。
+- DTO 按官方字段名从返回的动态列映射；`stock_basic` 必需身份字段为 `ts_code,symbol,name,area,industry,cnspell,market,list_date`，可空字段为 `fullname,enname,exchange,curr_type,list_status,delist_date,is_hs,act_name,act_ent_type`。领域映射另外要求 `exchange` 和 `list_status`；状态只接受当前合同 `L/D/P`，遇到官方列出的 `G/UN` 显式报 `DATA_INCOMPLETE`，不能丢行或伪装为受支持状态。
+- `trade_cal` 必需 `exchange,cal_date,is_open`；`pretrade_date` 可空。`is_open` 接收官方整数 `0/1`（也兼容字符串形式），其他值拒绝。
+- `daily` 领域映射必需 `ts_code,trade_date,open,high,low,close,vol,amount`；未使用的 `pre_close/change/pct_chg/ah_vol/ah_amount` 保留为可空 DTO 字段。停牌日无日线行。
+- `daily.amount`: 保留原 JSON 十进制文本，精确执行千元 × 1000 得到 `amount_yuan`。`daily.vol` 单位手，不要当股；如转股数需 ×100，但不强依赖。
+- `adj_factor` 的 `ts_code,trade_date,adj_factor` 必需，因子严格 >0。
+- `suspend_d` 必需 `ts_code,trade_date,suspend_type`，`suspend_timing` 可空；`S/R` 保持停复牌事件语义，不推导每日状态。`stk_limit` 必需 `trade_date,ts_code,up_limit,down_limit`，`pre_close,asset_type,exchange` 可空。两者当前仅映射和校验，不新增持久化表或市场领域模型。
 - `adj_factor`: 严格 >0；价格所有小数来自原接口，无隐式舍入。
-- MySQL `DECIMAL` 持久化原值，策略计算时解析为 float64 并检查 finite。约定金额 DECIMAL(24,4)、价格 DECIMAL(20,6)、因子 DECIMAL(24,10)，真实业务溢出时提前报错。
+- 使用 `types.Decimal` 保留规范十进制值；单位转换、DECIMAL 范围检查和数据库文本读写不经过 `float64`。MySQL 约定金额 DECIMAL(24,4)、价格 DECIMAL(20,6)、因子 DECIMAL(24,10)，精度/scale 超界直接报错，不允许静默舍入。只有公式/统计等数值计算边界可显式调用 `Float64Checked`；精确值不从计算结果回写。
 
 ## 配额管理
 - 第一版单进程速率控制：保守 global 100 req/min，`stock_basic` 专用 40 req/min（低于官方档位，均配置化），与 API 实际返回限制协调调整；避免误以为“所有接口 200/min”。
