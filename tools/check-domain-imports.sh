@@ -8,10 +8,10 @@ package_lines=$("$go_cmd" list -buildvcs=false -f '{{.ImportPath}} {{join .Impor
 while IFS= read -r package_line; do
   package=${package_line%% *}
   imports=${package_line#* }
-  [[ "$package" == */domain ]] || continue
+  [[ "$package" == "$module_prefix/internal/app" || "$package" == */domain ]] || continue
   for imported in $imports; do
     if [[ "$imported" == "$module_prefix/internal/infrastructure"* ]]; then
-      printf 'domain package %s imports infrastructure package %s\n' "$package" "$imported" >&2
+      printf 'business package %s imports infrastructure package %s\n' "$package" "$imported" >&2
       violations=1
     fi
   done
@@ -20,4 +20,4 @@ done <<< "$package_lines"
 if (( violations != 0 )); then
   exit 1
 fi
-printf '%s\n' 'domain package import boundaries passed'
+printf '%s\n' 'business package import boundaries passed'
