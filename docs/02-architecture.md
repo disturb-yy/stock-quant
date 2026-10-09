@@ -63,7 +63,7 @@ type ScreeningRepository interface {
 所有接口必须具有对输入日期、版本与批次的不可变表示；P01 冻结 `contracts` 后再落地结构体。接口较小，避免为了“未来会扩展”引入十余个空接口。
 
 ## 错误分类
-稳定 code：`INVALID_ARGUMENT / DATA_INCOMPLETE / PERMISSION_DENIED / RATE_LIMITED / UPSTREAM_UNAVAILABLE / STRATEGY_FAILED / TIMEOUT / NOT_FOUND / CONFLICT / DATA_UNTRUSTED / INVALID_FACTOR_INPUT / INTERNAL`。跨层封装保留 cause 供 `errors.Is`/`errors.As` 诊断；API/CLI 对外消息由边界层安全映射，不得直接泄露 Token、DSN、绝对路径等敏感字段。可重试只对速率限制、网络中断与可恢复 5xx，禁止重试权限错误与公式错误。
+稳定 code：`INVALID_ARGUMENT / DATA_INCOMPLETE / PERMISSION_DENIED / RATE_LIMITED / UPSTREAM_UNAVAILABLE / STRATEGY_FAILED / TIMEOUT / CANCELLED / INVALID_WORKER_RESPONSE / NOT_FOUND / CONFLICT / DATA_UNTRUSTED / INVALID_FACTOR_INPUT / INTERNAL`。跨层封装保留 cause 供 `errors.Is`/`errors.As` 诊断；API/CLI 对外消息由边界层安全映射，不得直接泄露 Token、DSN、绝对路径等敏感字段。可重试只对速率限制、网络中断与可恢复 5xx，禁止重试权限错误与公式错误。
 
 ## Go 规范
 使用 context、显式错误、表格驱动测试、事务边界在 repository/usecase，限流集中；数据字段单位写在名称如 `AmountYuan`。迁移 schema version 化。运行时禁止因子计算通过 `time.Now()` 查询别的日期。

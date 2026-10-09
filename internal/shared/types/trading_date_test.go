@@ -14,15 +14,35 @@ func TestTradingDateRoundTripsCanonicalAndTushareFormats(t *testing.T) {
 	if got := date.String(); got != "2026-10-08" {
 		t.Fatalf("String() = %q, want 2026-10-08", got)
 	}
-	if got := date.TushareString(); got != "20261008" {
+	tushareDate, err := date.TushareString()
+	if err != nil {
+		t.Fatalf("TushareString() error = %v", err)
+	}
+	if got := tushareDate; got != "20261008" {
 		t.Fatalf("TushareString() = %q, want 20261008", got)
 	}
-	parsed, err := ParseTushareDate(date.TushareString())
+	parsed, err := ParseTushareDate(tushareDate)
 	if err != nil {
 		t.Fatalf("ParseTushareDate() error = %v", err)
 	}
 	if parsed != date {
 		t.Fatalf("ParseTushareDate() = %v, want %v", parsed, date)
+	}
+}
+
+func TestZeroTradingDateIsExplicitlyInvalid(t *testing.T) {
+	var date TradingDate
+	if date.Valid() {
+		t.Fatal("zero TradingDate.Valid() = true")
+	}
+	if got := date.String(); got != "<invalid-trading-date>" {
+		t.Fatalf("zero TradingDate.String() = %q, want explicit invalid marker", got)
+	}
+	if _, err := date.DatabaseString(); err == nil {
+		t.Fatal("zero TradingDate.DatabaseString() error = nil")
+	}
+	if _, err := date.TushareString(); err == nil {
+		t.Fatal("zero TradingDate.TushareString() error = nil")
 	}
 }
 

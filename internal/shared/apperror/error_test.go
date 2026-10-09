@@ -24,6 +24,15 @@ func TestCodeOfUnknownErrorDefaultsToInternal(t *testing.T) {
 	}
 }
 
+func TestProtocolErrorCodesAreAvailable(t *testing.T) {
+	if CodeCancelled != "CANCELLED" {
+		t.Fatalf("CodeCancelled = %q", CodeCancelled)
+	}
+	if CodeInvalidWorkerResponse != "INVALID_WORKER_RESPONSE" {
+		t.Fatalf("CodeInvalidWorkerResponse = %q", CodeInvalidWorkerResponse)
+	}
+}
+
 func TestErrorFormatsCodeAndCause(t *testing.T) {
 	err := New(CodeInvalidArgument, errors.New("bad date"))
 	if got, want := err.Error(), "INVALID_ARGUMENT: bad date"; got != want {

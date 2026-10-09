@@ -10,18 +10,20 @@ import (
 type Code string
 
 const (
-	CodeInvalidArgument     Code = "INVALID_ARGUMENT"
-	CodeDataIncomplete      Code = "DATA_INCOMPLETE"
-	CodePermissionDenied    Code = "PERMISSION_DENIED"
-	CodeRateLimited         Code = "RATE_LIMITED"
-	CodeUpstreamUnavailable Code = "UPSTREAM_UNAVAILABLE"
-	CodeStrategyFailed      Code = "STRATEGY_FAILED"
-	CodeTimeout             Code = "TIMEOUT"
-	CodeNotFound            Code = "NOT_FOUND"
-	CodeConflict            Code = "CONFLICT"
-	CodeDataUntrusted       Code = "DATA_UNTRUSTED"
-	CodeInvalidFactorInput  Code = "INVALID_FACTOR_INPUT"
-	CodeInternal            Code = "INTERNAL"
+	CodeInvalidArgument       Code = "INVALID_ARGUMENT"
+	CodeDataIncomplete        Code = "DATA_INCOMPLETE"
+	CodePermissionDenied      Code = "PERMISSION_DENIED"
+	CodeRateLimited           Code = "RATE_LIMITED"
+	CodeUpstreamUnavailable   Code = "UPSTREAM_UNAVAILABLE"
+	CodeStrategyFailed        Code = "STRATEGY_FAILED"
+	CodeTimeout               Code = "TIMEOUT"
+	CodeCancelled             Code = "CANCELLED"
+	CodeNotFound              Code = "NOT_FOUND"
+	CodeConflict              Code = "CONFLICT"
+	CodeDataUntrusted         Code = "DATA_UNTRUSTED"
+	CodeInvalidFactorInput    Code = "INVALID_FACTOR_INPUT"
+	CodeInvalidWorkerResponse Code = "INVALID_WORKER_RESPONSE"
+	CodeInternal              Code = "INTERNAL"
 )
 
 // Error carries a stable code and the original cause for diagnostics.

@@ -42,22 +42,34 @@ func TradingDateFromTime(value time.Time, location *time.Location) (TradingDate,
 	return ParseTradingDate(value.In(location).Format(tradingDateLayout))
 }
 
-// String returns the canonical YYYY-MM-DD representation, also accepted by MySQL DATE.
+// Valid reports whether the date was constructed from a valid supported calendar date.
+func (date TradingDate) Valid() bool {
+	_, err := ParseTradingDate(date.value)
+	return err == nil
+}
+
+// String returns the canonical date or an explicit marker for the invalid zero value.
 func (date TradingDate) String() string {
+	if !date.Valid() {
+		return "<invalid-trading-date>"
+	}
 	return date.value
 }
 
 // DatabaseString returns the YYYY-MM-DD representation for a SQL DATE column.
-func (date TradingDate) DatabaseString() string {
-	return date.value
+func (date TradingDate) DatabaseString() (string, error) {
+	if !date.Valid() {
+		return "", fmt.Errorf("format MySQL DATE: invalid trading date")
+	}
+	return date.value, nil
 }
 
 // TushareString returns the YYYYMMDD representation expected by Tushare.
-func (date TradingDate) TushareString() string {
-	if date.value == "" {
-		return ""
+func (date TradingDate) TushareString() (string, error) {
+	if !date.Valid() {
+		return "", fmt.Errorf("format Tushare date: invalid trading date")
 	}
-	return date.value[:4] + date.value[5:7] + date.value[8:10]
+	return date.value[:4] + date.value[5:7] + date.value[8:10], nil
 }
 
 // AmountYuan stores a finite monetary value measured in Chinese yuan.
