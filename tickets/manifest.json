@@ -1,0 +1,670 @@
+{
+  "schema_version": "1.0",
+  "project": "stock-quant",
+  "task_count": 44,
+  "dependency_model": "serial-by-default",
+  "tasks": [
+    {
+      "id": "P00-01",
+      "title": "冻结技术栈与本地开发命令",
+      "phase": "P00",
+      "depends_on": [],
+      "spec_refs": [
+        "docs/01-requirements.md",
+        "docs/12-implementation-runbook.md"
+      ],
+      "ticket": "tickets/P00-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P00-01.md"
+    },
+    {
+      "id": "P00-02",
+      "title": "初始化应用结构与包级索引",
+      "phase": "P00",
+      "depends_on": [
+        "P00-01"
+      ],
+      "spec_refs": [
+        "docs/02-architecture.md",
+        "AGENTS.md"
+      ],
+      "ticket": "tickets/P00-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P00-02.md"
+    },
+    {
+      "id": "P00-03",
+      "title": "建立 CI 与质量检查脚本",
+      "phase": "P00",
+      "depends_on": [
+        "P00-02"
+      ],
+      "spec_refs": [
+        "docs/11-quality-gates.md",
+        "docs/13-security.md"
+      ],
+      "ticket": "tickets/P00-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P00-03.md"
+    },
+    {
+      "id": "P01-01",
+      "title": "冻结跨语言 JSON Schema v1",
+      "phase": "P01",
+      "depends_on": [
+        "P00-03"
+      ],
+      "spec_refs": [
+        "docs/07-python-protocol.md",
+        "contracts/strategy-request.schema.json",
+        "contracts/strategy-result.schema.json"
+      ],
+      "ticket": "tickets/P01-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P01-01.md"
+    },
+    {
+      "id": "P01-02",
+      "title": "交易日期/金额值对象及错误码",
+      "phase": "P01",
+      "depends_on": [
+        "P01-01"
+      ],
+      "spec_refs": [
+        "docs/02-architecture.md",
+        "docs/04-tushare.md",
+        "docs/06-api.md"
+      ],
+      "ticket": "tickets/P01-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P01-02.md"
+    },
+    {
+      "id": "P01-03",
+      "title": "定义核心 Port 与 Mock First",
+      "phase": "P01",
+      "depends_on": [
+        "P01-02"
+      ],
+      "spec_refs": [
+        "docs/02-architecture.md",
+        "docs/07-python-protocol.md"
+      ],
+      "ticket": "tickets/P01-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P01-03.md"
+    },
+    {
+      "id": "P02-01",
+      "title": "实现数据库迁移执行器",
+      "phase": "P02",
+      "depends_on": [
+        "P01-03"
+      ],
+      "spec_refs": [
+        "docs/05-database.md"
+      ],
+      "ticket": "tickets/P02-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P02-01.md"
+    },
+    {
+      "id": "P02-02",
+      "title": "实现股票/日线/复权仓储",
+      "phase": "P02",
+      "depends_on": [
+        "P02-01"
+      ],
+      "spec_refs": [
+        "docs/05-database.md",
+        "docs/04-tushare.md"
+      ],
+      "ticket": "tickets/P02-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P02-02.md"
+    },
+    {
+      "id": "P02-03",
+      "title": "实现任务与运行结果事务存储",
+      "phase": "P02",
+      "depends_on": [
+        "P02-02"
+      ],
+      "spec_refs": [
+        "docs/05-database.md",
+        "docs/06-api.md"
+      ],
+      "ticket": "tickets/P02-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P02-03.md"
+    },
+    {
+      "id": "P03-01",
+      "title": "实现 Tushare HTTP 封装与动态字段解析",
+      "phase": "P03",
+      "depends_on": [
+        "P02-03"
+      ],
+      "spec_refs": [
+        "docs/04-tushare.md",
+        "docs/REFERENCES.md"
+      ],
+      "ticket": "tickets/P03-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P03-01.md"
+    },
+    {
+      "id": "P03-02",
+      "title": "限流、重试、日志脱敏",
+      "phase": "P03",
+      "depends_on": [
+        "P03-01"
+      ],
+      "spec_refs": [
+        "docs/04-tushare.md",
+        "docs/13-security.md"
+      ],
+      "ticket": "tickets/P03-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P03-02.md"
+    },
+    {
+      "id": "P03-03",
+      "title": "映射行情单位与各 API DTO",
+      "phase": "P03",
+      "depends_on": [
+        "P03-02"
+      ],
+      "spec_refs": [
+        "docs/04-tushare.md",
+        "docs/03-strategy-spec.md"
+      ],
+      "ticket": "tickets/P03-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P03-03.md"
+    },
+    {
+      "id": "P03-04",
+      "title": "真实 Token 权限最小验收（可 BLOCKED）",
+      "phase": "P03",
+      "depends_on": [
+        "P03-03"
+      ],
+      "spec_refs": [
+        "docs/04-tushare.md",
+        "docs/13-security.md"
+      ],
+      "ticket": "tickets/P03-04.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P03-04.md"
+    },
+    {
+      "id": "P04-01",
+      "title": "交易日历、股票历史身份初始同步",
+      "phase": "P04",
+      "depends_on": [
+        "P03-04"
+      ],
+      "spec_refs": [
+        "docs/04-tushare.md",
+        "docs/05-database.md"
+      ],
+      "ticket": "tickets/P04-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P04-01.md"
+    },
+    {
+      "id": "P04-02",
+      "title": "全市场日线/复权批量回填",
+      "phase": "P04",
+      "depends_on": [
+        "P04-01"
+      ],
+      "spec_refs": [
+        "docs/04-tushare.md",
+        "docs/05-database.md"
+      ],
+      "ticket": "tickets/P04-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P04-02.md"
+    },
+    {
+      "id": "P04-03",
+      "title": "日增量调度与断点恢复",
+      "phase": "P04",
+      "depends_on": [
+        "P04-02"
+      ],
+      "spec_refs": [
+        "docs/10-operations.md",
+        "docs/04-tushare.md"
+      ],
+      "ticket": "tickets/P04-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P04-03.md"
+    },
+    {
+      "id": "P05-01",
+      "title": "历史股票池与 ST 状态可信度",
+      "phase": "P05",
+      "depends_on": [
+        "P04-03"
+      ],
+      "spec_refs": [
+        "docs/03-strategy-spec.md",
+        "docs/04-tushare.md",
+        "docs/14-decisions-risks.md"
+      ],
+      "ticket": "tickets/P05-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P05-01.md"
+    },
+    {
+      "id": "P05-02",
+      "title": "61市场交易日完整性与快照生成",
+      "phase": "P05",
+      "depends_on": [
+        "P05-01"
+      ],
+      "spec_refs": [
+        "docs/03-strategy-spec.md",
+        "docs/05-database.md"
+      ],
+      "ticket": "tickets/P05-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P05-02.md"
+    },
+    {
+      "id": "P05-03",
+      "title": "快照版本、哈希和回放能力",
+      "phase": "P05",
+      "depends_on": [
+        "P05-02"
+      ],
+      "spec_refs": [
+        "docs/05-database.md",
+        "docs/08-backtest.md"
+      ],
+      "ticket": "tickets/P05-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P05-03.md"
+    },
+    {
+      "id": "P06-01",
+      "title": "实现前复权序列与数学保护",
+      "phase": "P06",
+      "depends_on": [
+        "P05-03"
+      ],
+      "spec_refs": [
+        "docs/03-strategy-spec.md",
+        "docs/11-quality-gates.md"
+      ],
+      "ticket": "tickets/P06-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P06-01.md"
+    },
+    {
+      "id": "P06-02",
+      "title": "实现 60/20 日动量和 MA20",
+      "phase": "P06",
+      "depends_on": [
+        "P06-01"
+      ],
+      "spec_refs": [
+        "docs/03-strategy-spec.md",
+        "docs/11-quality-gates.md"
+      ],
+      "ticket": "tickets/P06-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P06-02.md"
+    },
+    {
+      "id": "P06-03",
+      "title": "实现活跃度/样本低波与双语言黄金值",
+      "phase": "P06",
+      "depends_on": [
+        "P06-02"
+      ],
+      "spec_refs": [
+        "docs/03-strategy-spec.md",
+        "docs/07-python-protocol.md"
+      ],
+      "ticket": "tickets/P06-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P06-03.md"
+    },
+    {
+      "id": "P07-01",
+      "title": "基础/趋势过滤器与拒绝原因",
+      "phase": "P07",
+      "depends_on": [
+        "P06-03"
+      ],
+      "spec_refs": [
+        "docs/03-strategy-spec.md",
+        "docs/11-quality-gates.md"
+      ],
+      "ticket": "tickets/P07-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P07-01.md"
+    },
+    {
+      "id": "P07-02",
+      "title": "横截面百分位及并列名次",
+      "phase": "P07",
+      "depends_on": [
+        "P07-01"
+      ],
+      "spec_refs": [
+        "docs/03-strategy-spec.md",
+        "docs/11-quality-gates.md"
+      ],
+      "ticket": "tickets/P07-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P07-02.md"
+    },
+    {
+      "id": "P07-03",
+      "title": "固定评分、稳定排序与 Top N",
+      "phase": "P07",
+      "depends_on": [
+        "P07-02"
+      ],
+      "spec_refs": [
+        "docs/03-strategy-spec.md",
+        "configs/strategies/momentum_v1.yaml"
+      ],
+      "ticket": "tickets/P07-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P07-03.md"
+    },
+    {
+      "id": "P07-04",
+      "title": "配置解析、加载校验与策略版本",
+      "phase": "P07",
+      "depends_on": [
+        "P07-03"
+      ],
+      "spec_refs": [
+        "configs/strategies/momentum_v1.yaml",
+        "docs/03-strategy-spec.md"
+      ],
+      "ticket": "tickets/P07-04.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P07-04.md"
+    },
+    {
+      "id": "P08-01",
+      "title": "实现 Python stdin/stdout v1 worker",
+      "phase": "P08",
+      "depends_on": [
+        "P07-04"
+      ],
+      "spec_refs": [
+        "docs/07-python-protocol.md",
+        "contracts/strategy-request.schema.json",
+        "contracts/strategy-result.schema.json"
+      ],
+      "ticket": "tickets/P08-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P08-01.md"
+    },
+    {
+      "id": "P08-02",
+      "title": "实现 Go PythonRunner 隔离与超时",
+      "phase": "P08",
+      "depends_on": [
+        "P08-01"
+      ],
+      "spec_refs": [
+        "docs/07-python-protocol.md",
+        "docs/13-security.md"
+      ],
+      "ticket": "tickets/P08-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P08-02.md"
+    },
+    {
+      "id": "P08-03",
+      "title": "验证 Go/Python 原始因子一致性",
+      "phase": "P08",
+      "depends_on": [
+        "P08-02"
+      ],
+      "spec_refs": [
+        "docs/03-strategy-spec.md",
+        "docs/07-python-protocol.md"
+      ],
+      "ticket": "tickets/P08-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P08-03.md"
+    },
+    {
+      "id": "P08-04",
+      "title": "Python 依赖锁定与策略注册表",
+      "phase": "P08",
+      "depends_on": [
+        "P08-03"
+      ],
+      "spec_refs": [
+        "docs/07-python-protocol.md",
+        "docs/13-security.md"
+      ],
+      "ticket": "tickets/P08-04.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P08-04.md"
+    },
+    {
+      "id": "P09-01",
+      "title": "同步与选股 Run 状态编排",
+      "phase": "P09",
+      "depends_on": [
+        "P08-04"
+      ],
+      "spec_refs": [
+        "docs/06-api.md",
+        "docs/10-operations.md"
+      ],
+      "ticket": "tickets/P09-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P09-01.md"
+    },
+    {
+      "id": "P09-02",
+      "title": "实现策略、数据质量与任务 API",
+      "phase": "P09",
+      "depends_on": [
+        "P09-01"
+      ],
+      "spec_refs": [
+        "docs/06-api.md",
+        "docs/13-security.md"
+      ],
+      "ticket": "tickets/P09-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P09-02.md"
+    },
+    {
+      "id": "P09-03",
+      "title": "实现选股运行与结果查询 API",
+      "phase": "P09",
+      "depends_on": [
+        "P09-02"
+      ],
+      "spec_refs": [
+        "docs/06-api.md",
+        "docs/05-database.md"
+      ],
+      "ticket": "tickets/P09-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P09-03.md"
+    },
+    {
+      "id": "P09-04",
+      "title": "命令行 smoke 和单日端到端链路",
+      "phase": "P09",
+      "depends_on": [
+        "P09-03"
+      ],
+      "spec_refs": [
+        "docs/12-implementation-runbook.md",
+        "docs/11-quality-gates.md"
+      ],
+      "ticket": "tickets/P09-04.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P09-04.md"
+    },
+    {
+      "id": "P10-01",
+      "title": "回测引擎按交易日事件驱动",
+      "phase": "P10",
+      "depends_on": [
+        "P09-04"
+      ],
+      "spec_refs": [
+        "docs/08-backtest.md",
+        "docs/03-strategy-spec.md"
+      ],
+      "ticket": "tickets/P10-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P10-01.md"
+    },
+    {
+      "id": "P10-02",
+      "title": "模拟撮合、A股约束与费用",
+      "phase": "P10",
+      "depends_on": [
+        "P10-01"
+      ],
+      "spec_refs": [
+        "docs/08-backtest.md",
+        "docs/14-decisions-risks.md"
+      ],
+      "ticket": "tickets/P10-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P10-02.md"
+    },
+    {
+      "id": "P10-03",
+      "title": "净值、收益、最大回撤与交易账本",
+      "phase": "P10",
+      "depends_on": [
+        "P10-02"
+      ],
+      "spec_refs": [
+        "docs/08-backtest.md",
+        "docs/05-database.md"
+      ],
+      "ticket": "tickets/P10-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P10-03.md"
+    },
+    {
+      "id": "P10-04",
+      "title": "回测 API 与偏差/可信度验收",
+      "phase": "P10",
+      "depends_on": [
+        "P10-03"
+      ],
+      "spec_refs": [
+        "docs/06-api.md",
+        "docs/08-backtest.md",
+        "docs/11-quality-gates.md"
+      ],
+      "ticket": "tickets/P10-04.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P10-04.md"
+    },
+    {
+      "id": "P11-01",
+      "title": "React 顶部导航与 API 类型",
+      "phase": "P11",
+      "depends_on": [
+        "P10-04"
+      ],
+      "spec_refs": [
+        "docs/09-dashboard.md",
+        "docs/06-api.md"
+      ],
+      "ticket": "tickets/P11-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P11-01.md"
+    },
+    {
+      "id": "P11-02",
+      "title": "选股与策略页完成",
+      "phase": "P11",
+      "depends_on": [
+        "P11-01"
+      ],
+      "spec_refs": [
+        "docs/09-dashboard.md",
+        "docs/06-api.md"
+      ],
+      "ticket": "tickets/P11-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P11-02.md"
+    },
+    {
+      "id": "P11-03",
+      "title": "数据质量/任务/回测页面与联调",
+      "phase": "P11",
+      "depends_on": [
+        "P11-02"
+      ],
+      "spec_refs": [
+        "docs/09-dashboard.md",
+        "docs/06-api.md"
+      ],
+      "ticket": "tickets/P11-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P11-03.md"
+    },
+    {
+      "id": "P12-01",
+      "title": "部署与配置、启动健康检查",
+      "phase": "P12",
+      "depends_on": [
+        "P11-03"
+      ],
+      "spec_refs": [
+        "docs/10-operations.md",
+        "docs/13-security.md"
+      ],
+      "ticket": "tickets/P12-01.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P12-01.md"
+    },
+    {
+      "id": "P12-02",
+      "title": "故障演练、性能基线与日志审计",
+      "phase": "P12",
+      "depends_on": [
+        "P12-01"
+      ],
+      "spec_refs": [
+        "docs/10-operations.md",
+        "docs/13-security.md"
+      ],
+      "ticket": "tickets/P12-02.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P12-02.md"
+    },
+    {
+      "id": "P12-03",
+      "title": "最终端到端验收与 release 包",
+      "phase": "P12",
+      "depends_on": [
+        "P12-02"
+      ],
+      "spec_refs": [
+        "docs/11-quality-gates.md",
+        "docs/12-implementation-runbook.md"
+      ],
+      "ticket": "tickets/P12-03.md",
+      "status": "NOT_STARTED",
+      "handoff": "handoffs/completed/P12-03.md"
+    }
+  ]
+}

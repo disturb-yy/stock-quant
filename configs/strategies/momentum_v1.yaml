@@ -1,0 +1,40 @@
+id: momentum_v1
+version: "1.0.0"
+name: "趋势动量选股"
+enabled: true
+runtime:
+  engine: go                 # P08 支持 python (raw factors only)
+  mode: inprocess
+  timeout_seconds: 120
+execution:
+  frequency: daily
+  signal_time: after_close
+  top_n: 20
+market:
+  exchanges: [SSE, SZSE]
+  exclude_bse: true
+data:
+  lookback_trading_sessions: 61
+  adjustment: qfq_asof
+  require_complete_window: true
+  historical_st_policy: strict
+filters:
+  min_listing_calendar_days: 120
+  exclude_st: true
+  exclude_suspended: true
+  min_avg_amount_20_yuan: 30000000
+  require_close_above_ma20: true
+  require_momentum_60_positive: true
+factors:
+  momentum_60: {window: 60, weight: 40, direction: higher}
+  momentum_20: {window: 20, weight: 30, direction: higher}
+  amount_activity_20: {window: 20, compare_previous_window: 20, weight: 20, direction: higher}
+  volatility_20: {window: 20, annualization_days: 252, stddev: sample, weight: 10, direction: lower}
+scoring:
+  method: cross_sectional_percentile
+  ties: average_rank
+  single_candidate_score: 50
+ranking:
+  - {field: score, order: desc}
+  - {field: momentum_60, order: desc}
+  - {field: ts_code, order: asc}

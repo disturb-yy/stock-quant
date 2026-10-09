@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stockquant.local/contracts/strategy-result.v1.json",
+  "title": "FactorComputeResult v1",
+  "type":"object", "additionalProperties":false,
+  "required":["schema_version","request_id","strategy_id","strategy_version","as_of","snapshot_hash","status","results","errors"],
+  "properties": {
+    "schema_version":{"const":"v1"},
+    "request_id":{"type":"string","minLength":1},
+    "strategy_id":{"type":"string","minLength":1},
+    "strategy_version":{"type":"string","minLength":1},
+    "as_of":{"type":"string","pattern":"^\\d{4}-\\d{2}-\\d{2}$"},
+    "snapshot_hash":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "status":{"enum":["success","failed"]},
+    "results":{"type":"array","items":{
+      "type":"object","additionalProperties":false,
+      "required":["ts_code","momentum_60","momentum_20","amount_activity_20","volatility_20","ma20","avg_amount_20_yuan"],
+      "properties": {
+        "ts_code":{"type":"string","minLength":1},
+        "momentum_60":{"type":"number"},
+        "momentum_20":{"type":"number"},
+        "amount_activity_20":{"type":"number"},
+        "volatility_20":{"type":"number","minimum":0},
+        "ma20":{"type":"number","exclusiveMinimum":0},
+        "avg_amount_20_yuan":{"type":"number","exclusiveMinimum":0}
+      }
+    }},
+    "errors":{"type":"array","items":{
+      "type":"object","additionalProperties":false,
+      "required":["code","message"],
+      "properties":{"ts_code":{"type":"string"},"code":{"type":"string"},"message":{"type":"string"}}
+    }}
+  }
+}
