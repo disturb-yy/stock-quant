@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -28,6 +29,10 @@ type ClientConfig struct {
 	Token      string
 	HTTPClient *http.Client
 	Timeout    time.Duration
+	RateLimits RateLimitConfig
+	Retry      RetryConfig
+	Observer   Observer
+	Logger     *slog.Logger
 }
 
 // Client sends Tushare Pro JSON requests and parses returned field names.
@@ -36,6 +41,11 @@ type Client struct {
 	token    string
 	http     *http.Client
 	timeout  time.Duration
+	limiter  *rateLimiter
+	retry    RetryConfig
+	observer Observer
+	logger   *slog.Logger
+	clock    clock
 }
 
 // QueryRequest describes one API call. RequiredFields are checked against the
@@ -68,6 +78,10 @@ type wireResponse struct {
 
 // NewClient builds a client with a bounded request timeout and a configurable endpoint.
 func NewClient(config ClientConfig) (*Client, error) {
+	return newClientWithClock(config, realClock{})
+}
+
+func newClientWithClock(config ClientConfig, source clock) (*Client, error) {
 	endpoint := config.Endpoint
 	if endpoint == "" {
 		endpoint = defaultEndpoint
@@ -89,8 +103,18 @@ func NewClient(config ClientConfig) (*Client, error) {
 	if strings.Contains(endpoint, config.Token) {
 		return nil, errors.New("create Tushare client: endpoint must not contain the token")
 	}
+	if err := validateResilienceConfig(config.RateLimits, config.Retry); err != nil {
+		return nil, fmt.Errorf("create Tushare client: %w", err)
+	}
 	if config.Timeout <= 0 {
 		config.Timeout = defaultRequestTimeout
+	}
+	if source == nil {
+		source = realClock{}
+	}
+	logger := config.Logger
+	if logger == nil {
+		logger = slog.Default()
 	}
 	httpClient := config.HTTPClient
 	if httpClient == nil {
@@ -98,7 +122,11 @@ func NewClient(config ClientConfig) (*Client, error) {
 	}
 	safeHTTPClient := *httpClient
 	safeHTTPClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
-	return &Client{endpoint: endpoint, token: config.Token, http: &safeHTTPClient, timeout: config.Timeout}, nil
+	return &Client{
+		endpoint: endpoint, token: config.Token, http: &safeHTTPClient, timeout: config.Timeout,
+		limiter: newRateLimiter(config.RateLimits, source), retry: normalizeRetryConfig(config.Retry),
+		observer: config.Observer, logger: logger, clock: source,
+	}, nil
 }
 
 // Query posts an API request and maps each item using the response's field order.
@@ -126,74 +154,150 @@ func (client *Client) Query(ctx context.Context, query QueryRequest) ([]Row, err
 
 	requestContext, cancel := context.WithTimeout(ctx, client.timeout)
 	defer cancel()
-	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, client.endpoint, bytes.NewReader(requestBody))
+	requestID, err := newRequestID()
+	if err != nil {
+		return nil, apperror.New(apperror.CodeInternal, err)
+	}
+	started := client.clock.Now()
+	observation := Observation{
+		RequestID: requestID, APIName: safeProviderMessage(query.APIName, client.token),
+		BusinessDate: safeProviderMessage(businessDate(query.Params), client.token),
+	}
+	rows, attempts, err := client.queryWithRetry(requestContext, query, requestBody)
+	observation.Duration = client.clock.Now().Sub(started)
+	observation.RowCount = len(rows)
+	observation.Attempts = attempts
+	if err != nil {
+		observation.ErrorClass = string(apperror.CodeOf(err))
+	}
+	client.logObservation(observation)
+	if client.observer != nil {
+		client.observer.Observe(observation)
+	}
+	return rows, err
+}
+
+func (client *Client) logObservation(event Observation) {
+	client.logger.Info("Tushare query finished",
+		slog.String("request_id", event.RequestID),
+		slog.String("api_name", event.APIName),
+		slog.Duration("duration", event.Duration),
+		slog.Int("row_count", event.RowCount),
+		slog.String("business_date", event.BusinessDate),
+		slog.String("error_class", event.ErrorClass),
+		slog.Int("attempts", event.Attempts),
+	)
+}
+
+func (client *Client) queryWithRetry(ctx context.Context, query QueryRequest, body []byte) ([]Row, int, error) {
+	for attempt := 1; attempt <= client.retry.MaxAttempts; attempt++ {
+		if err := client.limiter.Wait(ctx, query.APIName); err != nil {
+			return nil, attempt - 1, classifyWaitError(query.APIName, client.token, ctx, err)
+		}
+		rows, err := client.queryOnce(ctx, query, body)
+		if err == nil {
+			return rows, attempt, nil
+		}
+		if !isRetryable(err) || attempt == client.retry.MaxAttempts {
+			return nil, attempt, err
+		}
+		if err := client.clock.Sleep(ctx, client.retry.backoff(attempt)); err != nil {
+			return nil, attempt, classifyWaitError(query.APIName, client.token, ctx, err)
+		}
+	}
+	return nil, 0, apperror.New(apperror.CodeInternal, errors.New("retry loop ended unexpectedly"))
+}
+
+func (client *Client) queryOnce(ctx context.Context, query QueryRequest, body []byte) ([]Row, error) {
+	apiName := query.APIName
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, client.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, apperror.New(apperror.CodeInvalidArgument, fmt.Errorf("build Tushare request: %w", err))
 	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := client.http.Do(request)
 	if err != nil {
-		return nil, classifyTransportError(query.APIName, client.token, requestContext, err)
+		return nil, classifyTransportError(apiName, client.token, ctx, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusTooManyRequests {
-		return nil, providerError(query.APIName, client.token, apperror.CodeRateLimited, fmt.Errorf("HTTP status %d", response.StatusCode))
+		return nil, markRetryable(providerError(apiName, client.token, apperror.CodeRateLimited, fmt.Errorf("HTTP status %d", response.StatusCode)))
+	}
+	if response.StatusCode >= 500 && response.StatusCode < 600 {
+		return nil, markRetryable(providerError(apiName, client.token, apperror.CodeUpstreamUnavailable, fmt.Errorf("HTTP status %d", response.StatusCode)))
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, providerError(query.APIName, client.token, apperror.CodeUpstreamUnavailable, fmt.Errorf("HTTP status %d", response.StatusCode))
+		return nil, providerError(apiName, client.token, apperror.CodeUpstreamUnavailable, fmt.Errorf("HTTP status %d", response.StatusCode))
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBodyBytes+1))
+	body, err = io.ReadAll(io.LimitReader(response.Body, maxResponseBodyBytes+1))
 	if err != nil {
-		return nil, classifyTransportError(query.APIName, client.token, requestContext, err)
+		return nil, classifyTransportError(apiName, client.token, ctx, err)
 	}
 	if len(body) > maxResponseBodyBytes {
-		return nil, providerError(query.APIName, client.token, apperror.CodeDataIncomplete, errors.New("response exceeds maximum size"))
+		return nil, providerError(apiName, client.token, apperror.CodeDataIncomplete, errors.New("response exceeds maximum size"))
 	}
+	return client.parseResponse(apiName, query.RequiredFields, body)
+}
+
+func (client *Client) parseResponse(apiName string, requiredFields []string, body []byte) ([]Row, error) {
 	var decoded wireResponse
 	if err := json.Unmarshal(body, &decoded); err != nil {
-		return nil, providerError(query.APIName, client.token, apperror.CodeUpstreamUnavailable, errors.New("invalid JSON response"))
+		return nil, providerError(apiName, client.token, apperror.CodeUpstreamUnavailable, errors.New("invalid JSON response"))
 	}
 	if decoded.Code == nil {
-		return nil, providerError(query.APIName, client.token, apperror.CodeUpstreamUnavailable, errors.New("response code is missing"))
+		return nil, providerError(apiName, client.token, apperror.CodeUpstreamUnavailable, errors.New("response code is missing"))
 	}
 	if *decoded.Code != 0 {
-		message := safeProviderMessage(decoded.Msg, client.token)
-		cause := fmt.Errorf("provider code %d", *decoded.Code)
-		if message != "" {
-			cause = fmt.Errorf("provider code %d: %s", *decoded.Code, message)
-		}
-		if *decoded.Code == 2002 {
-			return nil, providerError(query.APIName, client.token, apperror.CodePermissionDenied, cause)
-		}
-		return nil, providerError(query.APIName, client.token, apperror.CodeUpstreamUnavailable, cause)
+		return nil, client.providerResponseError(apiName, *decoded.Code, decoded.Msg)
 	}
 	if decoded.Data == nil || decoded.Data.Fields == nil || decoded.Data.Items == nil {
-		return nil, providerError(query.APIName, client.token, apperror.CodeDataIncomplete, errors.New("response data, fields, or items are missing"))
+		return nil, providerError(apiName, client.token, apperror.CodeDataIncomplete, errors.New("response data, fields, or items are missing"))
 	}
-	fields := *decoded.Data.Fields
-	items := *decoded.Data.Items
+	if err := validateResponseFields(apiName, client.token, *decoded.Data.Fields, requiredFields); err != nil {
+		return nil, err
+	}
+	return responseRows(apiName, client.token, *decoded.Data.Fields, *decoded.Data.Items)
+}
+
+func (client *Client) providerResponseError(apiName string, code int, message string) error {
+	safeMessage := safeProviderMessage(message, client.token)
+	cause := fmt.Errorf("provider code %d", code)
+	if safeMessage != "" {
+		cause = fmt.Errorf("provider code %d: %s", code, safeMessage)
+	}
+	if code == 2002 {
+		return providerError(apiName, client.token, apperror.CodePermissionDenied, cause)
+	}
+	return providerError(apiName, client.token, apperror.CodeUpstreamUnavailable, cause)
+}
+
+func validateResponseFields(apiName, token string, fields, requiredFields []string) error {
 	if len(fields) == 0 {
-		return nil, providerError(query.APIName, client.token, apperror.CodeDataIncomplete, errors.New("response fields are empty"))
+		return providerError(apiName, token, apperror.CodeDataIncomplete, errors.New("response fields are empty"))
 	}
-	fieldIndexes := make(map[string]int, len(fields))
+	indexes := make(map[string]int, len(fields))
 	for index, field := range fields {
 		if strings.TrimSpace(field) == "" {
-			return nil, providerError(query.APIName, client.token, apperror.CodeDataIncomplete, errors.New("response contains an empty field name"))
+			return providerError(apiName, token, apperror.CodeDataIncomplete, errors.New("response contains an empty field name"))
 		}
-		if _, exists := fieldIndexes[field]; exists {
-			return nil, providerError(query.APIName, client.token, apperror.CodeDataIncomplete, fmt.Errorf("response contains duplicate field %q", field))
+		if _, exists := indexes[field]; exists {
+			return providerError(apiName, token, apperror.CodeDataIncomplete, fmt.Errorf("response contains duplicate field %q", field))
 		}
-		fieldIndexes[field] = index
+		indexes[field] = index
 	}
-	for _, required := range query.RequiredFields {
-		if _, exists := fieldIndexes[required]; !exists {
-			return nil, providerError(query.APIName, client.token, apperror.CodeDataIncomplete, fmt.Errorf("required field %q is missing", required))
+	for _, required := range requiredFields {
+		if _, exists := indexes[required]; !exists {
+			return providerError(apiName, token, apperror.CodeDataIncomplete, fmt.Errorf("required field %q is missing", required))
 		}
 	}
+	return nil
+}
+
+func responseRows(apiName, token string, fields []string, items [][]json.RawMessage) ([]Row, error) {
 	rows := make([]Row, 0, len(items))
 	for rowIndex, item := range items {
 		if len(item) != len(fields) {
-			return nil, providerError(query.APIName, client.token, apperror.CodeDataIncomplete, fmt.Errorf("row %d has %d cells for %d fields", rowIndex, len(item), len(fields)))
+			return nil, providerError(apiName, token, apperror.CodeDataIncomplete, fmt.Errorf("row %d has %d cells for %d fields", rowIndex, len(item), len(fields)))
 		}
 		row := make(Row, len(fields))
 		for fieldIndex, field := range fields {
@@ -225,7 +329,26 @@ func classifyTransportError(apiName, token string, ctx context.Context, cause er
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(cause, context.DeadlineExceeded) {
 		return providerError(apiName, token, apperror.CodeTimeout, context.DeadlineExceeded)
 	}
-	return providerError(apiName, token, apperror.CodeUpstreamUnavailable, errors.New("request transport failed"))
+	classified := providerError(apiName, token, apperror.CodeUpstreamUnavailable, errors.New("request transport failed"))
+	if isTransientNetworkError(cause) {
+		return markRetryable(classified)
+	}
+	return classified
+}
+
+func classifyWaitError(apiName, token string, ctx context.Context, cause error) error {
+	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(cause, context.Canceled) {
+		return providerError(apiName, token, apperror.CodeCancelled, context.Canceled)
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(cause, context.DeadlineExceeded) {
+		return providerError(apiName, token, apperror.CodeTimeout, context.DeadlineExceeded)
+	}
+	return providerError(apiName, token, apperror.CodeUpstreamUnavailable, errors.New("request wait failed"))
+}
+
+func isTransientNetworkError(cause error) bool {
+	var networkError net.Error
+	return errors.As(cause, &networkError) && networkError.Temporary() && !networkError.Timeout()
 }
 
 type safeCause struct {
