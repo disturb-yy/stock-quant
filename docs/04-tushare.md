@@ -2,14 +2,14 @@
 
 ## 权限分级与实测状态
 
-下表记录官方文档所列的最低积分门槛，不代表本项目当前 Token 已获得权限。Tushare 说明积分门槛是基础权限级别，实际可用频次随积分变化；只有经人工授权的真实 Token 请求才能把账户状态从 `NOT_TESTED` 更新为实测结果。完整权限矩阵与本次阻塞原因见 [`../handoffs/permission-matrix.md`](../handoffs/permission-matrix.md) 和 [`../handoffs/P03-04-live-smoke.md`](../handoffs/P03-04-live-smoke.md)。
+下表记录官方文档所列的最低积分门槛；实测列反映本项目 Token 在 2026-10-09 的真实最小查询结果。Tushare 说明积分门槛是基础权限级别，实际可用频次随积分变化；一次成功查询只证明当次 API 权限，不代表未来额度或服务可用性。完整查询参数和结果见 [`../handoffs/permission-matrix.md`](../handoffs/permission-matrix.md) 与 [`../handoffs/P03-04-live-smoke.md`](../handoffs/P03-04-live-smoke.md)。
 
 | API | 分级 | 官方文档最低积分 | 当前 Token 实测 |
 |---|---|---:|---|
-| `stock_basic` | 核心 | 2000 | `NOT_TESTED` |
-| `trade_cal` | 核心 | 2000 | `NOT_TESTED` |
-| `daily` | 核心 | 120 | `NOT_TESTED` |
-| `adj_factor` | 核心 | 2000 | `NOT_TESTED` |
+| `stock_basic` | 核心 | 2000 | `PASS`（2026-10-09；HTTP 200、接口码 0） |
+| `trade_cal` | 核心 | 2000 | `PASS`（2026-10-09；HTTP 200、接口码 0） |
+| `daily` | 核心 | 120 | `PASS`（2026-10-09；HTTP 200、接口码 0） |
+| `adj_factor` | 核心 | 2000 | `PASS`（2026-10-09；HTTP 200、接口码 0） |
 | `suspend_d` | 可选 | 2000 | `NOT_TESTED` |
 | `stk_limit` | 可选 | 2000 | `NOT_TESTED` |
 | `namechange` | 可选 | 官方接口页未列最低积分 | `NOT_TESTED` |
@@ -38,7 +38,7 @@ POST `https://api.tushare.pro`（如证书或地址文档更新，使用配置�
 
 客户端还可注入并发安全的 `tushare.Observer` 接收同一组脱敏查询摘要，供指标适配器使用。Observer 不接收 Token、请求体、任意参数或 provider 原始消息。指标适配器不得将 request_id 或业务日期作为标签。
 
-实现核验时，Tushare 官方 HTTP 页面仍以 `http://api.tushare.pro` 为请求示例；本项目保持文档指定的 HTTPS 默认并禁止自动降级，以免明文发送 Token。真实 TLS 连通性与 provider 权限尚未验证，后续真实调用若不能使用 TLS，需先明确安全决策再调整传输限制。
+实现核验时，Tushare 官方 HTTP 页面仍以 `http://api.tushare.pro` 为请求示例；本项目保持文档指定的 HTTPS 默认并禁止自动降级，以免明文发送 Token。2026-10-09 已通过 HTTPS 完成上述四个核心 API 的真实最小查询，TLS 连通性和当次权限均已验证；这不替代后续运行时可用性监控，也不代表未测试的可选接口有权限。
 
 ## 单位与字段转换
 - `trade_date`: `YYYYMMDD` → `DATE` (Asia/Shanghai 交易日期)；`ts_code` 保留 `.SH/.SZ` 后缀。

@@ -29,6 +29,7 @@
 | 确认事项与风险 | `docs/14-decisions-risks.md` | 有分歧时 |
 | 参考链接 | `docs/REFERENCES.md` | API 变更核验 |
 | 阶段图 | `phases/README.md` | 阶段交接 |
+| 当前阶段交接 | `phases/P03.md`, `handoffs/completed/P03-gate.md` | P03 Tushare 验收与进入 P04 前 |
 | 原子任务索引 | `tickets/ORDER.md` | 每次分派一个任务 |
 | AI 任务提示词 | `prompts/AI-START.md` | 拷贝给新 AI |
 | 环境检查 | `tools/env-check.sh`, `tools/env-check-test.sh` | P00 本地环境 |
