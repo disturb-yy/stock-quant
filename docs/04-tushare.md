@@ -15,6 +15,10 @@
 ## HTTP 契约
 POST `https://api.tushare.pro`（如证书或地址文档更新，使用配置覆盖）；`{"api_name":"daily","token":"<SECRET>","params":{"trade_date":"20261008"},"fields":"ts_code,trade_date,open,high,low,close,vol,amount"}`。响应含 `code,msg,data.fields,data.items`。以返回 `fields` 索引解析 `items`，不依赖固定列序；未知字段兼容、必需字段缺失报错。官方：https://tushare.pro/document/1?doc_id=40
 
+客户端用 `context.Context` 发送请求，未提供更短调用期限时默认 30 秒；仅允许 HTTPS provider endpoint，HTTP 只可用于 loopback 测试。HTTP 429 映射 `RATE_LIMITED`，provider code 2002 映射 `PERMISSION_DENIED`，超时/取消分别映射 `TIMEOUT`/`CANCELLED`，不可用上游映射 `UPSTREAM_UNAVAILABLE`，不完整响应映射 `DATA_INCOMPLETE`。错误信息不得包含 Token 或原始请求体；限流等待与重试属于后续 P03-02。
+
+实现核验时，Tushare 官方 HTTP 页面仍以 `http://api.tushare.pro` 为请求示例；本项目保持文档指定的 HTTPS 默认并禁止自动降级，以免明文发送 Token。真实 TLS 连通性与 provider 权限尚未验证，后续真实调用若不能使用 TLS，需先明确安全决策再调整传输限制。
+
 ## 单位与字段转换
 - `trade_date`: `YYYYMMDD` → `DATE` (Asia/Shanghai 交易日期)；`ts_code` 保留 `.SH/.SZ` 后缀。
 - `daily.amount`: 千元 × 1000 -> `amount_yuan`。`daily.vol` 单位手，不要当股；如转股数需 ×100，但不强依赖。

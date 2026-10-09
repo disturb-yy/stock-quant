@@ -1,2 +1,2 @@
-// Package tushare will contain the Tushare HTTP provider adapter.
+// Package tushare implements the Tushare Pro HTTP provider adapter.
 package tushare

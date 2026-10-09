@@ -12,7 +12,7 @@
 | Go CLI 与 Composition Root | `cmd/stockquant/`, `internal/app/` | 命令入口、用例组装 |
 | 市场与策略领域 | `internal/market/domain/`, `internal/factor/domain/`, `internal/strategy/momentum/domain/` | P02 行情实体、P06/P07 因子与策略 |
 | 选股与回测领域 | `internal/screening/domain/`, `internal/backtest/domain/` | P06/P07/P10 |
-| 技术适配器 | `internal/infrastructure/` | MySQL、Tushare、Python Runner、scheduler |
+| 技术适配器 | `internal/infrastructure/` | MySQL 仓储/迁移、Tushare HTTP 动态响应客户端、Python Runner、scheduler |
 | 项目目标及边界 | `docs/01-requirements.md` | 每次开始前 |
 | Go/Python 体系结构 | `docs/02-architecture.md` | package、依赖设计 |
 | 四因子精确定义 | `docs/03-strategy-spec.md` | 因子、过滤、评分、回测 |
