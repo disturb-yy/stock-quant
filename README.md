@@ -4,7 +4,7 @@ Stock Quant 是面向 A 股、以日线为频率的量化研究平台。平台�
 
 ## 项目状态
 
-项目按 [`tickets/ORDER.md`](tickets/ORDER.md) 中的顺序逐项实施。P00 工程基线和 P01 契约/领域接口已通过阶段门；P02-01 数据库迁移执行器已完成并合并，当前正在实现 P02-02 行情仓储。阶段证据见 [`handoffs/completed/P00-gate.md`](handoffs/completed/P00-gate.md) 和 [`handoffs/completed/P01-gate.md`](handoffs/completed/P01-gate.md)。已批准的规格见 [`docs/`](docs/)，已完成工作的证据记录在 `handoffs/completed/`。源指南中的示例用于演示 Go/Python JSON 交互，不是生产运行器或平台，也不作为本仓库的实现证据。
+项目按 [`tickets/ORDER.md`](tickets/ORDER.md) 中的顺序逐项实施。P00 工程基线和 P01 契约/领域接口已通过阶段门；P02-01 数据库迁移执行器与 P02-02 行情仓储已完成并合并，当前进入 P02-03。阶段证据见 [`handoffs/completed/P00-gate.md`](handoffs/completed/P00-gate.md)、[`handoffs/completed/P01-gate.md`](handoffs/completed/P01-gate.md) 和 [`handoffs/completed/P02-02.md`](handoffs/completed/P02-02.md)。已批准的规格见 [`docs/`](docs/)，已完成工作的证据记录在 `handoffs/completed/`。源指南中的示例用于演示 Go/Python JSON 交互，不是生产运行器或平台，也不作为本仓库的实现证据。
 
 ## 项目范围
 
@@ -12,7 +12,7 @@ Stock Quant 是面向 A 股、以日线为频率的量化研究平台。平台�
 - 固定策略为 `momentum_v1`：60 日动量（40%）、20 日动量（30%）、成交活跃度（20%）和低波动率（10%）。
 - Go 负责筛选、横截面评分和排序；Python 从只读快照计算原始因子。
 - 在 T 日生成信号，在 T+1 日模拟执行，并明确展示回测限制。
-- 当前提供 MySQL 8.4 版本化迁移命令；行情仓储正在按 P02-02 实现，Go HTTP API 和轻量级仪表盘将在后续票据实现。
+- 当前提供 MySQL 8.4 版本化迁移命令和股票、交易日历、日线、复权因子仓储；Go HTTP API 和轻量级仪表盘将在后续票据实现。
 
 V1 不包含真实券商委托、日内数据、机器学习预测、分布式服务或任意不可信 Python 插件。完整边界见 [`docs/01-requirements.md`](docs/01-requirements.md)，固定计算规则见 [`docs/03-strategy-spec.md`](docs/03-strategy-spec.md)。
 
