@@ -17,7 +17,7 @@
 | Go/Python 体系结构 | `docs/02-architecture.md` | package、依赖设计 |
 | 四因子精确定义 | `docs/03-strategy-spec.md` | 因子、过滤、评分、回测 |
 | Tushare 接口/积分/质量 | `docs/04-tushare.md` | Tushare/行情任务 |
-| SQL 与仓储 | `docs/05-database.md`, `db/migrations/*` | P02/P04/P05/P09 |
+| SQL 与仓储 | `docs/05-database.md`, `db/migrations/*`, `internal/infrastructure/mysql/` | P02/P04/P05/P09 |
 | REST API | `docs/06-api.md` | P09/P11 |
 | 跨语言运行契约 | `docs/07-python-protocol.md`, `contracts/*` | P01/P08 |
 | 回测交易语义 | `docs/08-backtest.md` | P10 |

@@ -4,7 +4,7 @@ Stock Quant 是面向 A 股、以日线为频率的量化研究平台。平台�
 
 ## 项目状态
 
-项目按 [`tickets/ORDER.md`](tickets/ORDER.md) 中的顺序逐项实施。P00 工程基线已通过本地及 GitHub Actions 检查，并已为 `main` 配置 PR 和必需状态检查保护。阶段证据见 [`handoffs/completed/P00-gate.md`](handoffs/completed/P00-gate.md)。已批准的规格见 [`docs/`](docs/)，已完成工作的证据记录在 `handoffs/completed/`。源指南中的示例用于演示 Go/Python JSON 交互，不是生产运行器或平台，也不作为本仓库的实现证据。
+项目按 [`tickets/ORDER.md`](tickets/ORDER.md) 中的顺序逐项实施。P00 工程基线和 P01 契约/领域接口已通过阶段门；P02-01 正在实现数据库迁移执行器。阶段证据见 [`handoffs/completed/P00-gate.md`](handoffs/completed/P00-gate.md) 和 [`handoffs/completed/P01-gate.md`](handoffs/completed/P01-gate.md)。已批准的规格见 [`docs/`](docs/)，已完成工作的证据记录在 `handoffs/completed/`。源指南中的示例用于演示 Go/Python JSON 交互，不是生产运行器或平台，也不作为本仓库的实现证据。
 
 ## 项目范围
 
@@ -12,7 +12,7 @@ Stock Quant 是面向 A 股、以日线为频率的量化研究平台。平台�
 - 固定策略为 `momentum_v1`：60 日动量（40%）、20 日动量（30%）、成交活跃度（20%）和低波动率（10%）。
 - Go 负责筛选、横截面评分和排序；Python 从只读快照计算原始因子。
 - 在 T 日生成信号，在 T+1 日模拟执行，并明确展示回测限制。
-- 后续阶段将实现 MySQL 持久化、Go HTTP API 和命令行工具，以及轻量级仪表盘。
+- 当前提供 MySQL 8.4 版本化迁移命令；行情仓储、Go HTTP API 和轻量级仪表盘将在后续票据实现。
 
 V1 不包含真实券商委托、日内数据、机器学习预测、分布式服务或任意不可信 Python 插件。完整边界见 [`docs/01-requirements.md`](docs/01-requirements.md)，固定计算规则见 [`docs/03-strategy-spec.md`](docs/03-strategy-spec.md)。
 
@@ -39,14 +39,16 @@ make test
 make check
 ```
 
-测试目标只使用本地固定测试样本，不需要 MySQL 或 Tushare Token。随着项目实施，以下命令也可用于构建和运行：
+普通测试不需要 Tushare Token；设置 `MYSQL_TEST_DSN` 后会在隔离数据库中执行真实 MySQL 迁移集成测试。GitHub Actions 使用临时 MySQL 8.4 服务。以下命令可用于构建、运行和显式迁移：
 
 ```bash
 make build
 make run
+APP_ENV=development make migrate-up
+APP_ENV=development make migrate-down
 ```
 
-当前 `health` 命令返回 `{"status":"ok","scope":"process"}`，只表示进程级存活；它不检查 MySQL、Tushare 或 HTTP 是否就绪。待 API 相关任务实现服务健康检查接口后，再补充对应说明。
+当前 `health` 命令返回 `{"status":"ok","scope":"process"}`，只表示进程级存活；它不检查 MySQL、Tushare 或 HTTP 是否就绪。迁移不会随应用启动自动运行；`migrate-down` 只允许在 `APP_ENV=development` 或 `APP_ENV=test` 时显式调用。
 
 `make check` 是 GitHub Actions 质量门的本地对应检查。测试位置和证据要求见 [`docs/testing.md`](docs/testing.md)。
 

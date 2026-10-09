@@ -1,18 +1,19 @@
 # 05 — 数据库与迁移设计
 
-数据库：MySQL 8，字符集 utf8mb4，时区所有事件 `UTC` datetime(6)，**业务交易日 DATE** 独立存储。统一表前缀 `t_`。参见 `db/migrations/0001_init.sql`。
+数据库：MySQL 8.4，字符集 utf8mb4，时区所有事件 `UTC` datetime(6)，**业务交易日 DATE** 独立存储。统一表前缀 `t_`。建表结构以 `db/migrations/0001.up.sql` 为准；迁移版本内容提交后不可修改。
 
 ## 表与聚合
+- `t_schema_migrations`：迁移执行器维护的版本账本，记录版本号、不可变文件 checksum、dirty 状态和执行方向；down 不删除此账本。
 - `t_stock`：按 ts_code 保存证券基础信息、上市退市日；`list_status` 只作当前辅助，历史池由上市/退市有效日期决定。
 - `t_trade_calendar`：exchange/cal_date 唯一；开市标识。
 - `t_daily_price`： `(ts_code,trade_date)` 唯一；原始 OHLC，amount_yuan，volume_lot，source_hash，revision。
 - `t_adj_factor`：`(ts_code,trade_date)` 唯一；正值、revision。
 - `t_stock_status_daily`：按日 ST、停牌状态与可信度、来源；`UNKNOWN` 必须有状态，不用 boolean 默认 false。
-- `t_sync_job`：task_key 唯一（source/api/date），status/attempts/requested/received/expected/quality_report/last_error。重跑复用键。
+- `t_sync_job`：task_key 唯一（source/api/date），status/attempts/requested_at/received_rows/expected_rows/quality_report_json/last_error。重跑复用键。
 - `t_data_snapshot`：snapshot_id, as_of, revision/hash, complete, st_quality, created_at。冻结该次运行的关键数据与状态摘要；完整复现需保留对应数据版本或不可变导出引用。
 - `t_strategy`：strategy id+version，参数 JSON、config_hash；已用于 run 的版本不原地覆盖。
 - `t_screening_run`：唯一 run_key 代表策略版本+日期+config_hash+snapshot_hash。job 状态及拒绝原因摘要。
-- `t_screening_result`：run_id+ts_code 唯一，raw factor JSON, factor score JSON, total_score, rank, reason JSON；存**全量筛后候选**或分表记录拒绝列表，不能只保留 Top20 而丢审计。
+- `t_screening_result`：run_id+ts_code 唯一，raw_factors_json, factor_scores_json, total_score, final_rank, reason_json；存**全量筛后候选**或分表记录拒绝列表，不能只保留 Top20 而丢审计。
 - `t_backtest_run`：run_id, 日期区间、执行/手续费配置、基准、metrics、数据版本。
 - `t_backtest_equity`：run_id/date -> equity, cash, exposure, benchmark_equity。
 - `t_backtest_trade`：交易意向、实际成交、拒绝原因、费用、数量、成交价。
@@ -23,12 +24,13 @@
 - 关键查询索引：date+ts_code、strategy+as_of、run_id+rank；JSON 字段不作第一版热点过滤。
 - 并发单运行 `run_key UNIQUE` 防重，冲突由唯一键决定，禁止先查后插竞争；多实例扩展可加租约，但首版单实例。
 
-## 迁移验收
-1. 全新 DB migrate up 能完成；重复 migrate up 不破坏。
-2. 对同一个 ts_code/date 同步两次仅一条，若修订则 revision++/source_hash 更新。
-3. 注入一条坏记录触发 rollback，同步任务不被标 SUCCESS。
-4. 策略运行中断后 status FAILED，历史 SUCCESS 结果不可被覆盖。
-5. EXPLAIN 常用日期条件命中索引。
+## 迁移执行与验收
+- 迁移版本保存在 `t_schema_migrations`，记录版本、文件 checksum、执行方向和 dirty 状态；同版本 checksum 不一致时必须失败。
+- 首次应用版本前，执行器会确认该迁移将创建的表均不存在；检测到同名既有对象时拒绝接管，不写入 applied 版本记录。MySQL DDL 会隐式提交。迁移语句须具备幂等性；中途失败保留 dirty 记录，修复引发失败的外部条件后，可用相同文件/checksum 显式重试。
+- 使用 MySQL `GET_LOCK` 串行化迁移，迁移期间固定同一物理连接；重复 up 不改动已应用版本。down 每次只撤销最新版本，down 文件只删除该迁移创建的对象并保留版本表。
+- CLI 只执行显式 `migrate up|down`，应用启动不自动迁移；down 仅允许 `APP_ENV=development|test`。
+- 本阶段 P02-01 验收：空库 up 建表、重复 up 无变化、down 只删除本迁移对象、down 后再次 up、部分失败可重试、并发锁和数据库连接失败路径。
+- 后续仓储/业务验收：同一个 ts_code/date 同步两次仅一条且修订时 revision++/source_hash 更新；坏记录触发 rollback 且同步任务不被标 SUCCESS；策略运行中断后 status FAILED；EXPLAIN 常用日期条件命中索引。这些不属于迁移执行器票据。
 
 ## 不可忽略
-MySQL 8 对 CHECK/JSON 的行为视具体版本核验；尽管 DB 定义了检查约束，应用层仍必须再次验证金额/日期/枚举，不能只依赖 CHECK。
+若后续迁移增加 CHECK 约束，须在目标 MySQL 版本核验其行为；应用层仍必须再次验证金额、日期和枚举，不能只依赖数据库约束。
