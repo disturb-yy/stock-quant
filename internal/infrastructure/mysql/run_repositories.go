@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	mysqldriver "github.com/go-sql-driver/mysql"
+
 	backtestdomain "stock-quant/internal/backtest/domain"
 	backtestports "stock-quant/internal/backtest/ports"
 	marketdomain "stock-quant/internal/market/domain"
@@ -63,19 +65,25 @@ func (r *syncJobRepository) CreateOrGet(ctx context.Context, job marketdomain.Sy
 	if len(job.QualityReport) > 0 && !json.Valid(job.QualityReport) {
 		return marketdomain.SyncJob{}, false, errors.New("quality report must be valid JSON")
 	}
-	result, err := r.db.ExecContext(ctx, `INSERT INTO t_sync_job (job_id,task_key,api_name,trade_date,status,attempts,requested_at,expected_rows,received_rows,quality_report_json,last_error,created_at,updated_at) VALUES (?,?,?,?,?,0,?,?,NULL,NULL,NULL,?,?) ON DUPLICATE KEY UPDATE task_key=t_sync_job.task_key`, job.JobID, job.TaskKey, job.APIName, tradeDate, job.Status, databaseTimestamp(job.RequestedAt), expected, databaseTimestamp(job.CreatedAt), databaseTimestamp(job.UpdatedAt))
+	_, err = r.db.ExecContext(ctx, `INSERT INTO t_sync_job (job_id,task_key,api_name,trade_date,status,attempts,requested_at,expected_rows,received_rows,quality_report_json,last_error,created_at,updated_at) VALUES (?,?,?,?,?,0,?,?,NULL,NULL,NULL,?,?)`, job.JobID, job.TaskKey, job.APIName, tradeDate, job.Status, databaseTimestamp(job.RequestedAt), expected, databaseTimestamp(job.CreatedAt), databaseTimestamp(job.UpdatedAt))
 	if err != nil {
+		if isDuplicateKey(err) {
+			created, findErr := r.findByTaskKey(ctx, job.TaskKey)
+			if findErr == nil {
+				return created, false, nil
+			}
+			if errors.Is(findErr, sql.ErrNoRows) {
+				return marketdomain.SyncJob{}, false, err
+			}
+			return marketdomain.SyncJob{}, false, errors.Join(err, findErr)
+		}
 		return marketdomain.SyncJob{}, false, fmt.Errorf("create or get sync job: %w", err)
-	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return marketdomain.SyncJob{}, false, fmt.Errorf("read sync job insert result: %w", err)
 	}
 	created, err := r.findByTaskKey(ctx, job.TaskKey)
 	if err != nil {
 		return marketdomain.SyncJob{}, false, err
 	}
-	return created, affected == 1, nil
+	return created, true, nil
 }
 
 func (r *syncJobRepository) MarkRunning(ctx context.Context, id string, at time.Time) error {
@@ -132,16 +140,22 @@ func (r *screeningRunRepository) CreateOrGet(ctx context.Context, run screeningd
 	if err := validateScreeningRun(run); err != nil {
 		return screeningdomain.RunMetadata{}, false, err
 	}
-	result, err := r.db.ExecContext(ctx, `INSERT INTO t_screening_run (run_id,run_key,strategy_id,strategy_version,as_of,config_hash,snapshot_hash,status,total_universe,total_eligible,error_code,error_message,rejection_summary_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,0,0,NULL,NULL,NULL,?,?) ON DUPLICATE KEY UPDATE run_key=t_screening_run.run_key`, run.RunID, run.RunKey, run.StrategyID, run.StrategyVersion, run.AsOf.String(), run.ConfigHash, run.SnapshotHash, run.Status, databaseTimestamp(run.CreatedAt), databaseTimestamp(run.UpdatedAt))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO t_screening_run (run_id,run_key,strategy_id,strategy_version,as_of,config_hash,snapshot_hash,status,total_universe,total_eligible,error_code,error_message,rejection_summary_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,0,0,NULL,NULL,NULL,?,?)`, run.RunID, run.RunKey, run.StrategyID, run.StrategyVersion, run.AsOf.String(), run.ConfigHash, run.SnapshotHash, run.Status, databaseTimestamp(run.CreatedAt), databaseTimestamp(run.UpdatedAt))
 	if err != nil {
+		if isDuplicateKey(err) {
+			got, findErr := r.findByRunKey(ctx, run.RunKey)
+			if findErr == nil {
+				return got, false, nil
+			}
+			if errors.Is(findErr, sql.ErrNoRows) {
+				return screeningdomain.RunMetadata{}, false, err
+			}
+			return screeningdomain.RunMetadata{}, false, errors.Join(err, findErr)
+		}
 		return screeningdomain.RunMetadata{}, false, fmt.Errorf("create or get screening run: %w", err)
 	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return screeningdomain.RunMetadata{}, false, fmt.Errorf("read screening insert result: %w", err)
-	}
 	got, err := r.findByRunKey(ctx, run.RunKey)
-	return got, affected == 1, err
+	return got, true, err
 }
 func validateScreeningRun(run screeningdomain.RunMetadata) error {
 	if strings.TrimSpace(run.RunID) == "" || len(run.RunKey) != 64 || !isHex(run.RunKey) || strings.TrimSpace(run.StrategyID) == "" || strings.TrimSpace(run.StrategyVersion) == "" || !run.AsOf.Valid() || !isHash(run.ConfigHash) || !isHash(run.SnapshotHash) || run.Status != screeningdomain.RunPending || run.CreatedAt.IsZero() || run.UpdatedAt.IsZero() {
@@ -265,16 +279,22 @@ func (r *backtestRunRepository) CreateOrGet(ctx context.Context, run backtestdom
 	if strings.TrimSpace(run.RunID) == "" || strings.TrimSpace(run.StrategyID) == "" || strings.TrimSpace(run.StrategyVersion) == "" || !run.StartDate.Valid() || !run.EndDate.Valid() || run.StartDate.String() > run.EndDate.String() || !isHash(run.ConfigHash) || !isHash(run.SnapshotHash) || strings.TrimSpace(run.Mode) == "" || run.Status != backtestdomain.RunPending || run.CreatedAt.IsZero() || run.UpdatedAt.IsZero() {
 		return backtestdomain.Run{}, false, errors.New("create backtest run: valid identity, range, hashes, PENDING status, and timestamps are required")
 	}
-	res, err := r.db.ExecContext(ctx, `INSERT INTO t_backtest_run (run_id,run_key,strategy_id,strategy_version,start_date,end_date,config_hash,snapshot_hash,mode,status,metrics_json,risk_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL,?,?) ON DUPLICATE KEY UPDATE run_key=t_backtest_run.run_key`, run.RunID, run.RunKey, run.StrategyID, run.StrategyVersion, run.StartDate.String(), run.EndDate.String(), run.ConfigHash, run.SnapshotHash, run.Mode, run.Status, databaseTimestamp(run.CreatedAt), databaseTimestamp(run.UpdatedAt))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO t_backtest_run (run_id,run_key,strategy_id,strategy_version,start_date,end_date,config_hash,snapshot_hash,mode,status,metrics_json,risk_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL,?,?)`, run.RunID, run.RunKey, run.StrategyID, run.StrategyVersion, run.StartDate.String(), run.EndDate.String(), run.ConfigHash, run.SnapshotHash, run.Mode, run.Status, databaseTimestamp(run.CreatedAt), databaseTimestamp(run.UpdatedAt))
 	if err != nil {
+		if isDuplicateKey(err) {
+			got, findErr := r.findByRunKey(ctx, run.RunKey)
+			if findErr == nil {
+				return got, false, nil
+			}
+			if errors.Is(findErr, sql.ErrNoRows) {
+				return backtestdomain.Run{}, false, err
+			}
+			return backtestdomain.Run{}, false, errors.Join(err, findErr)
+		}
 		return backtestdomain.Run{}, false, fmt.Errorf("create or get backtest run: %w", err)
 	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return backtestdomain.Run{}, false, fmt.Errorf("read backtest insert result: %w", err)
-	}
 	got, err := r.findByRunKey(ctx, run.RunKey)
-	return got, affected == 1, err
+	return got, true, err
 }
 func (r *backtestRunRepository) MarkRunning(ctx context.Context, id string, at time.Time) error {
 	return guardedTransition(ctx, r.db, "start backtest run", `UPDATE t_backtest_run SET status='RUNNING',updated_at=? WHERE run_id=? AND status='PENDING'`, []any{databaseTimestamp(at), id}, backtestdomain.ErrInvalidStatusTransition, func() (string, error) {
@@ -478,10 +498,15 @@ func isHex(value string) bool {
 		return false
 	}
 	for _, r := range value {
-		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f' || r >= 'A' && r <= 'F') {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
 			return false
 		}
 	}
 	return true
 }
 func isHash(value string) bool { return isHex(value) }
+
+func isDuplicateKey(err error) bool {
+	var mysqlError *mysqldriver.MySQLError
+	return errors.As(err, &mysqlError) && mysqlError.Number == 1062
+}

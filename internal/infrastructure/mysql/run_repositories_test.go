@@ -210,6 +210,10 @@ func TestBacktestCreateOrGetBindsSnapshotAndPersistsOutcomeMySQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	uppercaseSnapshot := backtestRun(7, strings.Repeat("A", 64))
+	if _, _, err := repository.CreateOrGet(ctx, uppercaseSnapshot); err == nil || !strings.Contains(err.Error(), "valid identity") {
+		t.Fatalf("uppercase snapshot hash create error = %v, want canonical lowercase validation error", err)
+	}
 	run := backtestRun(1, strings.Repeat("d", 64))
 	created, inserted, err := repository.CreateOrGet(ctx, run)
 	if err != nil || !inserted || created.RunKey != run.RunKey {
@@ -265,6 +269,61 @@ func TestRunRepositoriesReturnDatabaseFailure(t *testing.T) {
 	backtestRepo, _ := NewBacktestRunRepository(db)
 	if _, _, err := backtestRepo.CreateOrGet(ctx, backtestRun(1, strings.Repeat("a", 64))); err == nil || !strings.Contains(err.Error(), "database is closed") {
 		t.Fatalf("BacktestStore.CreateOrGet() error = %v, want closed database", err)
+	}
+}
+
+func TestCreateOrGetCreatedFlagIgnoresClientFoundRowsMySQL(t *testing.T) {
+	db := openIsolatedMySQLClientFoundRows(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	migrateForRepositoryTest(t, ctx, db)
+
+	syncRepo, err := NewSyncJobRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := syncJob(1, "daily/SSE/2026-06-04")
+	if _, created, err := syncRepo.CreateOrGet(ctx, job); err != nil || !created {
+		t.Fatalf("first sync create = %v, %v", created, err)
+	}
+	job.JobID = idempotentID(2)
+	if got, created, err := syncRepo.CreateOrGet(ctx, job); err != nil || created || got.JobID != idempotentID(1) {
+		t.Fatalf("duplicate sync create = %#v, %v, %v", got, created, err)
+	}
+
+	screenRepo, err := NewScreeningRunRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := screeningRun(3, strings.Repeat("a", 64))
+	if _, created, err := screenRepo.CreateOrGet(ctx, screen); err != nil || !created {
+		t.Fatalf("first screening create = %v, %v", created, err)
+	}
+	screen.RunID = idempotentID(4)
+	if got, created, err := screenRepo.CreateOrGet(ctx, screen); err != nil || created || got.RunID != idempotentID(3) {
+		t.Fatalf("duplicate screening create = %#v, %v, %v", got, created, err)
+	}
+
+	backtestRepo, err := NewBacktestRunRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backtest := backtestRun(5, strings.Repeat("b", 64))
+	if _, created, err := backtestRepo.CreateOrGet(ctx, backtest); err != nil || !created {
+		t.Fatalf("first backtest create = %v, %v", created, err)
+	}
+	backtest.RunID = idempotentID(6)
+	if got, created, err := backtestRepo.CreateOrGet(ctx, backtest); err != nil || created || got.RunID != idempotentID(5) {
+		t.Fatalf("duplicate backtest create = %#v, %v, %v", got, created, err)
+	}
+}
+
+func TestRunHashesRequireCanonicalLowercaseHex(t *testing.T) {
+	if !isHash(strings.Repeat("a", 64)) {
+		t.Fatal("lowercase hash rejected")
+	}
+	if isHash(strings.Repeat("A", 64)) {
+		t.Fatal("uppercase hash accepted")
 	}
 }
 

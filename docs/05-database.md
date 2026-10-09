@@ -14,7 +14,7 @@
 - `t_strategy`：strategy id+version，参数 JSON、config_hash；已用于 run 的版本不原地覆盖。
 - `t_screening_run`：唯一 run_key 代表策略版本+日期+config_hash+snapshot_hash。同键提交返回已有运行；状态为 PENDING/RUNNING/SUCCESS/FAILED/BLOCKED，成功、失败和阻塞均为终态；运行结果、拒绝原因摘要和 SUCCESS 在同一事务提交。
 - `t_screening_result`：run_id+ts_code 唯一，raw_factors_json, factor_scores_json, total_score, final_rank, reason_json；存**全量筛后候选**或分表记录拒绝列表，不能只保留 Top20 而丢审计。
-- `t_backtest_run`：run_id、唯一 run_key、策略版本、日期区间、config_hash、snapshot_hash、模式、状态、metrics/risk 和错误摘要。run_key 为策略、版本、日期区间、配置摘要、数据快照摘要和模式的 SHA-256；同键提交返回已有运行。0002 为旧记录按 run_id 确定性补入 run_key；旧记录未知的 snapshot_hash 保持 NULL，新运行必须绑定有效快照摘要。
+- `t_backtest_run`：run_id、唯一 run_key、策略版本、日期区间、config_hash、snapshot_hash、模式、状态、metrics/risk 和错误摘要。config_hash 与 snapshot_hash 使用协议规定的小写 64 位十六进制；run_key 为策略、版本、日期区间、配置摘要、数据快照摘要和模式的 SHA-256；同键提交返回已有运行。0002 为旧记录按 run_id 确定性补入 run_key；旧记录未知的 snapshot_hash 保持 NULL，新运行必须绑定有效快照摘要。
 - `t_backtest_equity`：run_id/date -> equity, cash, exposure, benchmark_equity。
 - `t_backtest_trade`：交易意向、实际成交、拒绝原因、费用、数量、成交价。
 

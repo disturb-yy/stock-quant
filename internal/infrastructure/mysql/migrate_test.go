@@ -196,6 +196,16 @@ func TestMigrateUnavailableDatabaseReturnsCause(t *testing.T) {
 
 func openIsolatedMySQL(t *testing.T) *sql.DB {
 	t.Helper()
+	return openIsolatedMySQLWithOptions(t, false)
+}
+
+func openIsolatedMySQLClientFoundRows(t *testing.T) *sql.DB {
+	t.Helper()
+	return openIsolatedMySQLWithOptions(t, true)
+}
+
+func openIsolatedMySQLWithOptions(t *testing.T, clientFoundRows bool) *sql.DB {
+	t.Helper()
 	dsn := os.Getenv("MYSQL_TEST_DSN")
 	if dsn == "" {
 		t.Skip("MYSQL_TEST_DSN is not set; real MySQL integration test skipped")
@@ -204,6 +214,7 @@ func openIsolatedMySQL(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("parse MYSQL_TEST_DSN: %v", err)
 	}
+	cfg.ClientFoundRows = clientFoundRows
 	cfg.DBName = ""
 	admin, err := sql.Open("mysql", cfg.FormatDSN())
 	if err != nil {
