@@ -6,8 +6,8 @@
 - `t_schema_migrations`：迁移执行器维护的版本账本，记录版本号、不可变文件 checksum、dirty 状态和执行方向；down 不删除此账本。
 - `t_stock`：按 ts_code 保存证券基础信息、上市退市日；`list_status` 只作当前辅助，历史池由上市/退市有效日期决定。
 - `t_trade_calendar`：exchange/cal_date 唯一；开市标识。
-- `t_daily_price`： `(ts_code,trade_date)` 唯一；原始 OHLC，amount_yuan，volume_lot，source_hash，revision。
-- `t_adj_factor`：`(ts_code,trade_date)` 唯一；正值、revision。
+- `t_daily_price`：`(ts_code,trade_date)` 唯一；未复权 OHLC、`amount_yuan`（元）、`volume_lot`（手）、`source_hash`、`revision`、`fetched_at`。仓储接收已转换为元的金额，不再乘 1000。
+- `t_adj_factor`：`(ts_code,trade_date)` 唯一；正值、`source_hash`、`revision`、`fetched_at`。
 - `t_stock_status_daily`：按日 ST、停牌状态与可信度、来源；`UNKNOWN` 必须有状态，不用 boolean 默认 false。
 - `t_sync_job`：task_key 唯一（source/api/date），status/attempts/requested_at/received_rows/expected_rows/quality_report_json/last_error。重跑复用键。
 - `t_data_snapshot`：snapshot_id, as_of, revision/hash, complete, st_quality, created_at。冻结该次运行的关键数据与状态摘要；完整复现需保留对应数据版本或不可变导出引用。
@@ -17,6 +17,13 @@
 - `t_backtest_run`：run_id, 日期区间、执行/手续费配置、基准、metrics、数据版本。
 - `t_backtest_equity`：run_id/date -> equity, cash, exposure, benchmark_equity。
 - `t_backtest_trade`：交易意向、实际成交、拒绝原因、费用、数量、成交价。
+
+## 行情仓储约定
+- daily/adj_factor 的 `source_hash` 是单行规范化业务字段（不含 `fetched_at`/`revision`）的 SHA-256 十六进制摘要；原始整批 HTTP 响应 hash 属于同步批次审计信息，不能充当每行版本 hash。
+- daily/adj_factor 实质字段或行 hash 改变时 `revision` 加 1；仅重抓时间改变时更新 `fetched_at`，不增加 revision。stock/calendar 当前 schema 不含行 hash/revision，仓储只 upsert 当前记录。
+- 仓储拒绝超出 MySQL DECIMAL 总位数/scale 的值，不做静默舍入。`amount_yuan` 以人民币元传入；Tushare 千元转换归 provider 数据映射层。
+- 代码范围查询按 `trade_date ASC` 返回；全市场日期查询按 `ts_code ASC` 返回；交易日历按日期升序。stock 查询不按 `list_status` 过滤，退市证券仍可读取历史资料和日线。
+- 行情仓储提供按证券/日期区间读取及按交易日全市场读取；后者直接使用 `(trade_date,ts_code)` 索引并按代码稳定排序。
 
 ## 一致性与索引
 - 同步单日 bulk UPSERT in transaction；标记 synced 只有在记录落库且校验通过之后。

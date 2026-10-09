@@ -10,7 +10,7 @@
 | 稳定错误分类 | `internal/shared/apperror/` | 跨层错误码与 cause 链 |
 | 市场/因子/选股 ports | `internal/market/ports/`, `internal/factor/ports/`, `internal/screening/ports/` | 应用与行情、因子执行及结果存储的接口边界 |
 | Go CLI 与 Composition Root | `cmd/stockquant/`, `internal/app/` | 命令入口、用例组装 |
-| 市场与策略领域 | `internal/market/domain/`, `internal/factor/domain/`, `internal/strategy/momentum/domain/` | P01/P06/P07 |
+| 市场与策略领域 | `internal/market/domain/`, `internal/factor/domain/`, `internal/strategy/momentum/domain/` | P02 行情实体、P06/P07 因子与策略 |
 | 选股与回测领域 | `internal/screening/domain/`, `internal/backtest/domain/` | P06/P07/P10 |
 | 技术适配器 | `internal/infrastructure/` | MySQL、Tushare、Python Runner、scheduler |
 | 项目目标及边界 | `docs/01-requirements.md` | 每次开始前 |
