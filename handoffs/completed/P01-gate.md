@@ -1,0 +1,21 @@
+# P01 阶段门禁与证据
+
+- 本阶段 tickets 与 handoff 文件：
+  - P01-01 — `handoffs/completed/P01-01.md`，ACCEPTED；PR #2 merge SHA `70084e5109030f27d4409c46627a3f810503d22e`。
+  - P01-02 — `handoffs/completed/P01-02.md`，ACCEPTED；PR #3 merge SHA `2a5fffffdc7868f06953a9200a5273ad2114c4d1`。
+  - P01-03 — `handoffs/completed/P01-03.md`，ACCEPTED；PR #4 merge SHA `75ceb9f659e3818f72049cad4fd4d79958970acb`。
+- 验证环境：Linux amd64；Go 1.27.0；Python 3.12.3。
+- 关键端到端命令及真实结果：
+  - `make check`：PASS，覆盖 gofmt、secret scan、Go 测试、11 个 Python 协议测试、5 个工具测试、质量门失败路径、环境配置、业务包依赖边界、go vet 与 go build。
+  - `go test ./internal/app ./internal/market/ports ./internal/factor/ports ./internal/screening/ports -count=1`：PASS。
+  - `go list -deps ./...`：PASS。
+  - `git diff --check`：PASS。
+  - PR #2 hosted CI：[push](https://github.com/disturb-yy/stock-quant/actions/runs/37889495908)、[pull_request](https://github.com/disturb-yy/stock-quant/actions/runs/37889506458)，均 PASS。
+  - PR #3 hosted CI：[push](https://github.com/disturb-yy/stock-quant/actions/runs/37890152457)、[pull_request](https://github.com/disturb-yy/stock-quant/actions/runs/37890157116)，均 PASS。
+  - PR #4 hosted CI：[push](https://github.com/disturb-yy/stock-quant/actions/runs/37891311774)、[pull_request](https://github.com/disturb-yy/stock-quant/actions/runs/37891319179)，均 PASS。
+- 覆盖矩阵：协议/schema 日期、字段和数值边界；交易日期/金额值对象与错误分类；快照到因子 runner fake 请求/响应、依赖故障、cause/code、响应身份与取消传播；app/domain 到 infrastructure 的依赖边界。
+- 上一阶段契约兼容：P00-01/02/03 已合并；P01-01/02/03 所有变更保持 Go/Python protocol v1 一致，无未解决兼容问题。
+- 新增 ADR 与已知限制：无新增 ADR。未验证 MySQL、Tushare token/真实行情和 Python 子进程；这些不属于 P01 ticket 的通过证据，将由 P02/P03/P08 票据验证。P01-03 的 `ScreeningStore` 只保存运行身份元数据，不包含后续筛选结果和评分行为。
+- Gate: **PASS**
+- 审核人及日期：`p01_02_contract_review` 独立阶段门复核，2026-10-09；stable_id `f7b42921f42cdc37ec47c1ca273b49a3f7170279f393a943ad3f5ab2a42a4296`。复核确认 handoff、PR merge SHA、远端 CI 一致，并在合并代码上重跑 `make check` 与 `git diff --check` 均通过。
+- 下一阶段可依赖的稳定接口、表与 fixture：`contracts` 中冻结的协议 v1 DTO/schema；`internal/shared/types.TradingDate`、`AmountYuan` 与 `internal/shared/apperror` 错误码；`internal/market/ports` 的 SnapshotRepository/MarketDataProvider；`internal/factor/ports.FactorRunner`；`internal/screening/ports.ScreeningStore`。数据库迁移/表尚未由 P01 交付，P02-01 按数据库文档建立。
