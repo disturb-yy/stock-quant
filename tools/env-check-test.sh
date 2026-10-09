@@ -10,6 +10,35 @@ output=$(DATA_PROVIDER=tushare TUSHARE_TOKEN= "$script_dir/env-check.sh" 2>&1) &
   printf 'missing-token error was not readable: %s\n' "$output" >&2
   exit 1
 }
+[[ "$output" == *'mock fallback is disabled'* ]] || {
+  printf 'missing-token diagnostic did not explicitly reject fallback: %s\n' "$output" >&2
+  exit 1
+}
+
+output=$(DATA_PROVIDER=mock TUSHARE_TOKEN= "$script_dir/env-check.sh" 2>&1)
+[[ "$output" == *'provider_status=offline/mock'* ]] || {
+  printf 'mock mode did not report offline/mock status: %s\n' "$output" >&2
+  exit 1
+}
+[[ "$output" != *'real sync succeeded'* ]] || {
+  printf '%s\n' 'mock mode claimed a real sync succeeded' >&2
+  exit 1
+}
+
+provider_token_value=test-only-placeholder
+export DATA_PROVIDER=tushare
+printf -v TUSHARE_TOKEN '%s' "$provider_token_value"
+export TUSHARE_TOKEN
+output=$("$script_dir/env-check.sh" 2>&1)
+unset TUSHARE_TOKEN DATA_PROVIDER provider_token_value
+[[ "$output" == *'provider_status=configured_unverified'* ]] || {
+  printf 'configured provider did not report unverified permissions: %s\n' "$output" >&2
+  exit 1
+}
+[[ "$output" != *'test-only-placeholder'* ]] || {
+  printf '%s\n' 'provider diagnostic exposed the token value' >&2
+  exit 1
+}
 
 missing_bin=$(mktemp -d)
 output=$(PATH="$missing_bin" /bin/bash "$script_dir/env-check.sh" 2>&1) && {

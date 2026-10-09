@@ -4,7 +4,7 @@ Stock Quant 是面向 A 股、以日线为频率的量化研究平台。平台�
 
 ## 项目状态
 
-项目按 [`tickets/ORDER.md`](tickets/ORDER.md) 中的顺序逐项实施。P00 工程基线、P01 契约/领域接口和 P02 MySQL/持久化均已通过阶段门；P03-01（Tushare HTTP 封装与动态字段解析）、P03-02（限流、重试、日志脱敏）和 P03-03（API DTO、单位映射与精确十进制存储）已验收，当前任务为 P03-04（真实 Token 权限最小验收，可在缺少凭据时标记 BLOCKED）。阶段证据见 [`handoffs/completed/P00-gate.md`](handoffs/completed/P00-gate.md)、[`handoffs/completed/P01-gate.md`](handoffs/completed/P01-gate.md)、[`handoffs/completed/P02-gate.md`](handoffs/completed/P02-gate.md)、[`handoffs/completed/P03-01.md`](handoffs/completed/P03-01.md)、[`handoffs/completed/P03-02.md`](handoffs/completed/P03-02.md) 和 [`handoffs/completed/P03-03.md`](handoffs/completed/P03-03.md)。已批准的规格见 [`docs/`](docs/)，已完成工作的证据记录在 `handoffs/completed/`。源指南中的示例用于演示 Go/Python JSON 交互，不是生产运行器或平台，也不作为本仓库的实现证据。
+项目按 [`tickets/ORDER.md`](tickets/ORDER.md) 中的顺序逐项实施。P00 工程基线、P01 契约/领域接口和 P02 MySQL/持久化均已通过阶段门；P03-01（Tushare HTTP 封装与动态字段解析）、P03-02（限流、重试、日志脱敏）和 P03-03（API DTO、单位映射与精确十进制存储）已验收。当前任务为 P03-04：本地权限分级和 offline/mock 诊断已实现，真实 Token 权限验收因缺少本地 Token 与单独的真实请求授权而处于 `BLOCKED`，项目未进入 P04。阶段证据见 [`handoffs/completed/P00-gate.md`](handoffs/completed/P00-gate.md)、[`handoffs/completed/P01-gate.md`](handoffs/completed/P01-gate.md)、[`handoffs/completed/P02-gate.md`](handoffs/completed/P02-gate.md)、[`handoffs/completed/P03-01.md`](handoffs/completed/P03-01.md)、[`handoffs/completed/P03-02.md`](handoffs/completed/P03-02.md) 和 [`handoffs/completed/P03-03.md`](handoffs/completed/P03-03.md)。已批准的规格见 [`docs/`](docs/)，已完成工作的证据记录在 `handoffs/completed/`。源指南中的示例用于演示 Go/Python JSON 交互，不是生产运行器或平台，也不作为本仓库的实现证据。
 
 ## 项目范围
 

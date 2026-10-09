@@ -38,6 +38,6 @@ The Makefile disables Go VCS stamping only when the checkout has no Git reposito
 
 ## Provider credentials
 
-The default `DATA_PROVIDER=mock` mode needs no credentials. To select Tushare, set `DATA_PROVIDER=tushare` and provide `TUSHARE_TOKEN` through a local secret manager or the current shell environment. The doctor check validates that the variable is present, but does not call Tushare or prove account permissions. Do not put real credentials in `.env.example`, Git, test fixtures, logs, or handoff evidence.
+The default `DATA_PROVIDER=mock` mode needs no credentials and doctor reports `provider_status=offline/mock`. To select Tushare, set `DATA_PROVIDER=tushare` and provide `TUSHARE_TOKEN` through a local secret manager or the current shell environment. Without a token the check fails and does not fall back to Mock. With a token it reports `provider_status=configured_unverified`; doctor does not call Tushare or prove account permissions. Do not put real credentials in `.env.example`, Git, test fixtures, logs, or handoff evidence.
 
 Database connection variables are listed in `.env.example`. `make migrate-up` runs only when explicitly requested; it never runs at application startup. `make migrate-down` is restricted to `APP_ENV=development` or `APP_ENV=test`. Migration integration tests require `MYSQL_TEST_DSN`; the tests create and drop a uniquely named temporary database and must use a disposable MySQL account. Do not use the example values as production credentials.
