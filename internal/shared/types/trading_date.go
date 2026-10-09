@@ -2,7 +2,6 @@ package types
 
 import (
 	"fmt"
-	"math"
 	"time"
 )
 
@@ -70,22 +69,4 @@ func (date TradingDate) TushareString() (string, error) {
 		return "", fmt.Errorf("format Tushare date: invalid trading date")
 	}
 	return date.value[:4] + date.value[5:7] + date.value[8:10], nil
-}
-
-// AmountYuan stores a finite monetary value measured in Chinese yuan.
-type AmountYuan struct {
-	value float64
-}
-
-// NewAmountYuan constructs an amount without rounding or restricting its sign.
-func NewAmountYuan(value float64) (AmountYuan, error) {
-	if math.IsNaN(value) || math.IsInf(value, 0) {
-		return AmountYuan{}, fmt.Errorf("amount in yuan must be finite")
-	}
-	return AmountYuan{value: value}, nil
-}
-
-// Float64 returns the amount in yuan without changing its precision.
-func (amount AmountYuan) Float64() float64 {
-	return amount.value
 }

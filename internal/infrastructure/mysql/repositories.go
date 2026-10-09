@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
 	"time"
 
@@ -165,7 +163,7 @@ open=incoming.open,high=incoming.high,low=incoming.low,close=incoming.close,amou
 			if err := validateDailyPrice(item); err != nil {
 				return fmt.Errorf("daily price row %d: %w", i, err)
 			}
-			if _, err := tx.ExecContext(ctx, query, item.TSCode, item.TradeDate.String(), item.Open, item.High, item.Low, item.Close, item.AmountYuan.Float64(), item.VolumeLot, item.SourceHash, databaseTimestamp(item.FetchedAt)); err != nil {
+			if _, err := tx.ExecContext(ctx, query, item.TSCode, item.TradeDate.String(), item.Open.String(), item.High.String(), item.Low.String(), item.Close.String(), item.AmountYuan.String(), item.VolumeLot.String(), item.SourceHash, databaseTimestamp(item.FetchedAt)); err != nil {
 				return fmt.Errorf("upsert daily price %s/%s: %w", item.TSCode, item.TradeDate, err)
 			}
 		}
@@ -177,72 +175,68 @@ func (r *dailyPriceRepository) ListByCode(ctx context.Context, tsCode string, fr
 	if err := validateRange(tsCode, from, through, "stock code"); err != nil {
 		return nil, err
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT ts_code,CAST(trade_date AS CHAR),open,high,low,close,amount_yuan,volume_lot,source_hash,revision,DATE_FORMAT(fetched_at,'%Y-%m-%d %H:%i:%s.%f') FROM t_daily_price WHERE ts_code=? AND trade_date BETWEEN ? AND ? ORDER BY trade_date ASC`, tsCode, from.String(), through.String())
+	rows, err := r.db.QueryContext(ctx, `SELECT ts_code,CAST(trade_date AS CHAR),CAST(open AS CHAR),CAST(high AS CHAR),CAST(low AS CHAR),CAST(close AS CHAR),CAST(amount_yuan AS CHAR),CAST(volume_lot AS CHAR),source_hash,revision,DATE_FORMAT(fetched_at,'%Y-%m-%d %H:%i:%s.%f') FROM t_daily_price WHERE ts_code=? AND trade_date BETWEEN ? AND ? ORDER BY trade_date ASC`, tsCode, from.String(), through.String())
 	if err != nil {
 		return nil, fmt.Errorf("list daily prices: %w", err)
 	}
 	defer rows.Close()
-	result := make([]domain.DailyPrice, 0)
-	for rows.Next() {
-		var item domain.DailyPrice
-		var date, fetchedAt string
-		var amount float64
-		if err := rows.Scan(&item.TSCode, &date, &item.Open, &item.High, &item.Low, &item.Close, &amount, &item.VolumeLot, &item.SourceHash, &item.Revision, &fetchedAt); err != nil {
-			return nil, fmt.Errorf("scan daily price: %w", err)
-		}
-		item.TradeDate, err = types.ParseTradingDate(date)
-		if err != nil {
-			return nil, fmt.Errorf("parse daily trade date: %w", err)
-		}
-		item.AmountYuan, err = types.NewAmountYuan(amount)
-		if err != nil {
-			return nil, fmt.Errorf("parse daily amount: %w", err)
-		}
-		item.FetchedAt, err = parseDatabaseTimestamp(fetchedAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse daily fetched time: %w", err)
-		}
-		result = append(result, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read daily prices: %w", err)
-	}
-	return result, nil
+	return readDailyPrices(rows, "daily price")
 }
 
 func (r *dailyPriceRepository) ListByDate(ctx context.Context, date types.TradingDate) ([]domain.DailyPrice, error) {
 	if !date.Valid() {
 		return nil, fmt.Errorf("list daily prices by date: valid trading date is required")
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT ts_code,CAST(trade_date AS CHAR),open,high,low,close,amount_yuan,volume_lot,source_hash,revision,DATE_FORMAT(fetched_at,'%Y-%m-%d %H:%i:%s.%f') FROM t_daily_price WHERE trade_date=? ORDER BY ts_code ASC`, date.String())
+	rows, err := r.db.QueryContext(ctx, `SELECT ts_code,CAST(trade_date AS CHAR),CAST(open AS CHAR),CAST(high AS CHAR),CAST(low AS CHAR),CAST(close AS CHAR),CAST(amount_yuan AS CHAR),CAST(volume_lot AS CHAR),source_hash,revision,DATE_FORMAT(fetched_at,'%Y-%m-%d %H:%i:%s.%f') FROM t_daily_price WHERE trade_date=? ORDER BY ts_code ASC`, date.String())
 	if err != nil {
 		return nil, fmt.Errorf("list daily prices by date: %w", err)
 	}
 	defer rows.Close()
+	return readDailyPrices(rows, "daily price by date")
+}
+
+func readDailyPrices(rows *sql.Rows, label string) ([]domain.DailyPrice, error) {
 	result := make([]domain.DailyPrice, 0)
 	for rows.Next() {
 		var item domain.DailyPrice
-		var tradeDate, fetchedAt string
-		var amount float64
-		if err := rows.Scan(&item.TSCode, &tradeDate, &item.Open, &item.High, &item.Low, &item.Close, &amount, &item.VolumeLot, &item.SourceHash, &item.Revision, &fetchedAt); err != nil {
-			return nil, fmt.Errorf("scan daily price by date: %w", err)
+		var date, fetchedAt, amount string
+		var open, high, low, close, volume string
+		if err := rows.Scan(&item.TSCode, &date, &open, &high, &low, &close, &amount, &volume, &item.SourceHash, &item.Revision, &fetchedAt); err != nil {
+			return nil, fmt.Errorf("scan %s: %w", label, err)
 		}
-		item.TradeDate, err = types.ParseTradingDate(tradeDate)
-		if err != nil {
-			return nil, fmt.Errorf("parse daily trade date: %w", err)
+		fields := []struct {
+			name   string
+			text   string
+			target *types.Decimal
+		}{{"open", open, &item.Open}, {"high", high, &item.High}, {"low", low, &item.Low}, {"close", close, &item.Close}, {"volume", volume, &item.VolumeLot}}
+		for _, field := range fields {
+			parsed, err := types.ParseDecimal(field.text)
+			if err != nil {
+				return nil, fmt.Errorf("parse daily %s: %w", field.name, err)
+			}
+			*field.target = parsed
 		}
-		item.AmountYuan, err = types.NewAmountYuan(amount)
+		var err error
+		item.TradeDate, err = types.ParseTradingDate(date)
 		if err != nil {
-			return nil, fmt.Errorf("parse daily amount: %w", err)
+			return nil, fmt.Errorf("parse %s trade date: %w", label, err)
+		}
+		parsedAmount, err := types.ParseDecimal(amount)
+		if err != nil {
+			return nil, fmt.Errorf("parse %s amount: %w", label, err)
+		}
+		item.AmountYuan, err = types.NewAmountYuanDecimal(parsedAmount)
+		if err != nil {
+			return nil, fmt.Errorf("validate %s amount: %w", label, err)
 		}
 		item.FetchedAt, err = parseDatabaseTimestamp(fetchedAt)
 		if err != nil {
-			return nil, fmt.Errorf("parse daily fetched time: %w", err)
+			return nil, fmt.Errorf("parse %s fetched time: %w", label, err)
 		}
 		result = append(result, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read daily prices by date: %w", err)
+		return nil, fmt.Errorf("read %ss: %w", label, err)
 	}
 	return result, nil
 }
@@ -255,7 +249,7 @@ revision=t_adj_factor.revision+IF(t_adj_factor.adj_factor<>incoming.adj_factor O
 			if err := validateAdjFactor(item); err != nil {
 				return fmt.Errorf("adjustment factor row %d: %w", i, err)
 			}
-			if _, err := tx.ExecContext(ctx, query, item.TSCode, item.TradeDate.String(), item.Factor, item.SourceHash, databaseTimestamp(item.FetchedAt)); err != nil {
+			if _, err := tx.ExecContext(ctx, query, item.TSCode, item.TradeDate.String(), item.Factor.String(), item.SourceHash, databaseTimestamp(item.FetchedAt)); err != nil {
 				return fmt.Errorf("upsert adjustment factor %s/%s: %w", item.TSCode, item.TradeDate, err)
 			}
 		}
@@ -267,7 +261,7 @@ func (r *adjFactorRepository) ListByCode(ctx context.Context, tsCode string, fro
 	if err := validateRange(tsCode, from, through, "stock code"); err != nil {
 		return nil, err
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT ts_code,CAST(trade_date AS CHAR),adj_factor,source_hash,revision,DATE_FORMAT(fetched_at,'%Y-%m-%d %H:%i:%s.%f') FROM t_adj_factor WHERE ts_code=? AND trade_date BETWEEN ? AND ? ORDER BY trade_date ASC`, tsCode, from.String(), through.String())
+	rows, err := r.db.QueryContext(ctx, `SELECT ts_code,CAST(trade_date AS CHAR),CAST(adj_factor AS CHAR),source_hash,revision,DATE_FORMAT(fetched_at,'%Y-%m-%d %H:%i:%s.%f') FROM t_adj_factor WHERE ts_code=? AND trade_date BETWEEN ? AND ? ORDER BY trade_date ASC`, tsCode, from.String(), through.String())
 	if err != nil {
 		return nil, fmt.Errorf("list adjustment factors: %w", err)
 	}
@@ -276,8 +270,13 @@ func (r *adjFactorRepository) ListByCode(ctx context.Context, tsCode string, fro
 	for rows.Next() {
 		var item domain.AdjFactor
 		var date, fetchedAt string
-		if err := rows.Scan(&item.TSCode, &date, &item.Factor, &item.SourceHash, &item.Revision, &fetchedAt); err != nil {
+		var factor string
+		if err := rows.Scan(&item.TSCode, &date, &factor, &item.SourceHash, &item.Revision, &fetchedAt); err != nil {
 			return nil, fmt.Errorf("scan adjustment factor: %w", err)
+		}
+		item.Factor, err = types.ParseDecimal(factor)
+		if err != nil {
+			return nil, fmt.Errorf("parse adjustment factor decimal: %w", err)
 		}
 		item.TradeDate, err = types.ParseTradingDate(date)
 		if err != nil {
@@ -299,7 +298,7 @@ func (r *adjFactorRepository) ListByDate(ctx context.Context, date types.Trading
 	if !date.Valid() {
 		return nil, fmt.Errorf("list adjustment factors by date: valid trading date is required")
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT ts_code,CAST(trade_date AS CHAR),adj_factor,source_hash,revision,DATE_FORMAT(fetched_at,'%Y-%m-%d %H:%i:%s.%f') FROM t_adj_factor WHERE trade_date=? ORDER BY ts_code ASC`, date.String())
+	rows, err := r.db.QueryContext(ctx, `SELECT ts_code,CAST(trade_date AS CHAR),CAST(adj_factor AS CHAR),source_hash,revision,DATE_FORMAT(fetched_at,'%Y-%m-%d %H:%i:%s.%f') FROM t_adj_factor WHERE trade_date=? ORDER BY ts_code ASC`, date.String())
 	if err != nil {
 		return nil, fmt.Errorf("list adjustment factors by date: %w", err)
 	}
@@ -308,8 +307,13 @@ func (r *adjFactorRepository) ListByDate(ctx context.Context, date types.Trading
 	for rows.Next() {
 		var item domain.AdjFactor
 		var tradeDate, fetchedAt string
-		if err := rows.Scan(&item.TSCode, &tradeDate, &item.Factor, &item.SourceHash, &item.Revision, &fetchedAt); err != nil {
+		var factor string
+		if err := rows.Scan(&item.TSCode, &tradeDate, &factor, &item.SourceHash, &item.Revision, &fetchedAt); err != nil {
 			return nil, fmt.Errorf("scan adjustment factor by date: %w", err)
+		}
+		item.Factor, err = types.ParseDecimal(factor)
+		if err != nil {
+			return nil, fmt.Errorf("parse adjustment factor by date decimal: %w", err)
 		}
 		item.TradeDate, err = types.ParseTradingDate(tradeDate)
 		if err != nil {
@@ -365,15 +369,20 @@ func validateDailyPrice(item domain.DailyPrice) error {
 	if err := validateCodeDate(item.TSCode, item.TradeDate, "stock code"); err != nil {
 		return err
 	}
-	for name, value := range map[string]float64{"open": item.Open, "high": item.High, "low": item.Low, "close": item.Close} {
+	for name, value := range map[string]types.Decimal{"open": item.Open, "high": item.High, "low": item.Low, "close": item.Close} {
 		if err := validateDecimal(name, value, 20, 6, true); err != nil {
 			return err
 		}
 	}
-	if item.High < item.Open || item.High < item.Close || item.Low > item.Open || item.Low > item.Close || item.High < item.Low {
+	highOpen, _ := item.High.Cmp(item.Open)
+	highClose, _ := item.High.Cmp(item.Close)
+	lowOpen, _ := item.Low.Cmp(item.Open)
+	lowClose, _ := item.Low.Cmp(item.Close)
+	highLow, _ := item.High.Cmp(item.Low)
+	if highOpen < 0 || highClose < 0 || lowOpen > 0 || lowClose > 0 || highLow < 0 {
 		return fmt.Errorf("daily OHLC values are inconsistent")
 	}
-	if err := validateDecimal("amount_yuan", item.AmountYuan.Float64(), 24, 4, false); err != nil {
+	if err := validateDecimal("amount_yuan", item.AmountYuan.Decimal(), 24, 4, false); err != nil {
 		return err
 	}
 	if err := validateDecimal("volume_lot", item.VolumeLot, 24, 4, false); err != nil {
@@ -427,28 +436,23 @@ func validateRange(code string, from, through types.TradingDate, label string) e
 	return nil
 }
 
-func validateDecimal(name string, value float64, precision, scale int, positive bool) error {
-	if math.IsNaN(value) || math.IsInf(value, 0) {
-		return fmt.Errorf("%s must be finite", name)
+func validateDecimal(name string, value types.Decimal, precision, scale int, positive bool) error {
+	if !value.Valid() || !value.Fits(precision, scale) {
+		return fmt.Errorf("%s exceeds DECIMAL(%d,%d) or is invalid", name, precision, scale)
 	}
-	if positive && value <= 0 {
+	zero, err := types.ParseDecimal("0")
+	if err != nil {
+		return err
+	}
+	comparison, err := value.Cmp(zero)
+	if err != nil {
+		return fmt.Errorf("%s cannot be compared", name)
+	}
+	if positive && comparison <= 0 {
 		return fmt.Errorf("%s must be positive", name)
 	}
-	if !positive && value < 0 {
+	if !positive && comparison < 0 {
 		return fmt.Errorf("%s must not be negative", name)
-	}
-	formatted := strconv.FormatFloat(math.Abs(value), 'f', -1, 64)
-	parts := strings.SplitN(formatted, ".", 2)
-	integerDigits := len(strings.TrimLeft(parts[0], "0"))
-	if integerDigits == 0 {
-		integerDigits = 1
-	}
-	fractionDigits := 0
-	if len(parts) == 2 {
-		fractionDigits = len(strings.TrimRight(parts[1], "0"))
-	}
-	if integerDigits > precision-scale || fractionDigits > scale {
-		return fmt.Errorf("%s exceeds DECIMAL(%d,%d) without rounding", name, precision, scale)
 	}
 	return nil
 }

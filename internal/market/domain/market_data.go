@@ -30,12 +30,12 @@ type TradeCalendar struct {
 type DailyPrice struct {
 	TSCode     string
 	TradeDate  types.TradingDate
-	Open       float64
-	High       float64
-	Low        float64
-	Close      float64
+	Open       types.Decimal
+	High       types.Decimal
+	Low        types.Decimal
+	Close      types.Decimal
 	AmountYuan types.AmountYuan
-	VolumeLot  float64
+	VolumeLot  types.Decimal
 	SourceHash string
 	Revision   int
 	FetchedAt  time.Time
@@ -45,7 +45,7 @@ type DailyPrice struct {
 type AdjFactor struct {
 	TSCode     string
 	TradeDate  types.TradingDate
-	Factor     float64
+	Factor     types.Decimal
 	SourceHash string
 	Revision   int
 	FetchedAt  time.Time
