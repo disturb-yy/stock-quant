@@ -6,6 +6,8 @@
 | 本地环境/版本 | `docs/environment-setup.md`, `Makefile`, `.env.example` | 首次设置或环境问题 |
 | 测试与 CI | `docs/testing.md`, `.github/workflows/ci.yml`, `tools/check.sh` | 本地/合并前质量验证 |
 | 跨语言 JSON 协议与 DTO | `contracts/`, `python/stockquant/protocol.py` | P01/P08 请求与响应校验、编码和解码 |
+| 通用交易日期与元金额 | `internal/shared/types/` | 日期格式互转、显式时区提取、金额有限值校验 |
+| 稳定错误分类 | `internal/shared/apperror/` | 跨层错误码与 cause 链 |
 | Go CLI 与 Composition Root | `cmd/stockquant/`, `internal/app/` | 命令入口、用例组装 |
 | 市场与策略领域 | `internal/market/domain/`, `internal/factor/domain/`, `internal/strategy/momentum/domain/` | P01/P06/P07 |
 | 选股与回测领域 | `internal/screening/domain/`, `internal/backtest/domain/` | P06/P07/P10 |
