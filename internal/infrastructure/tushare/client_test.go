@@ -114,6 +114,7 @@ func TestTushareQueryClassifiesHTTP500WithoutLeakingToken(t *testing.T) {
 	}))
 	defer server.Close()
 	client := newTestClient(t, server.URL, "token-secret", time.Second)
+	client.retry.MaxAttempts = 1
 	_, err := client.Query(context.Background(), QueryRequest{APIName: "daily"})
 	if err == nil || apperror.CodeOf(err) != apperror.CodeUpstreamUnavailable {
 		t.Fatalf("Query() error = %v, code %q", err, apperror.CodeOf(err))
@@ -127,6 +128,7 @@ func TestTushareQueryClassifiesHTTP429(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusTooManyRequests) }))
 	defer server.Close()
 	client := newTestClient(t, server.URL, "token-secret", time.Second)
+	client.retry.MaxAttempts = 1
 	_, err := client.Query(context.Background(), QueryRequest{APIName: "daily"})
 	if err == nil || apperror.CodeOf(err) != apperror.CodeRateLimited {
 		t.Fatalf("Query() error = %v, code %q", err, apperror.CodeOf(err))

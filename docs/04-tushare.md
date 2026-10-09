@@ -15,7 +15,11 @@
 ## HTTP 契约
 POST `https://api.tushare.pro`（如证书或地址文档更新，使用配置覆盖）；`{"api_name":"daily","token":"<SECRET>","params":{"trade_date":"20261008"},"fields":"ts_code,trade_date,open,high,low,close,vol,amount"}`。响应含 `code,msg,data.fields,data.items`。以返回 `fields` 索引解析 `items`，不依赖固定列序；未知字段兼容、必需字段缺失报错。官方：https://tushare.pro/document/1?doc_id=40
 
-客户端用 `context.Context` 发送请求，未提供更短调用期限时默认 30 秒；仅允许 HTTPS provider endpoint，HTTP 只可用于 loopback 测试。HTTP 429 映射 `RATE_LIMITED`，provider code 2002 映射 `PERMISSION_DENIED`，超时/取消分别映射 `TIMEOUT`/`CANCELLED`，不可用上游映射 `UPSTREAM_UNAVAILABLE`，不完整响应映射 `DATA_INCOMPLETE`。错误信息不得包含 Token 或原始请求体；限流等待与重试属于后续 P03-02。
+客户端用 `context.Context` 发送请求，未提供更短调用期限时默认 30 秒；仅允许 HTTPS provider endpoint，HTTP 只可用于 loopback 测试。HTTP 429 映射 `RATE_LIMITED`，provider code 2002 映射 `PERMISSION_DENIED`，超时/取消分别映射 `TIMEOUT`/`CANCELLED`，不可用上游映射 `UPSTREAM_UNAVAILABLE`，不完整响应映射 `DATA_INCOMPLETE`。错误信息不得包含 Token 或原始请求体。
+
+进程内限流同时应用 global 100 次/分钟和 per-api 默认 100 次/分钟，`stock_basic` 默认 40 次/分钟；配置可覆盖这些速率。令牌桶突发容量固定为 1，以平滑启动。每次实际 HTTP 尝试（包括重试）都重新取得 global 和对应 API 配额。重试默认最多 3 次尝试（含首次请求），对 HTTP 429、5xx 和明确瞬时网络错误使用指数退避与 full jitter；默认退避基数 100ms、上限 2s。权限码 2002、其他 provider 业务拒绝、参数错误、响应解析错误、取消和期限到达均不重试。限流等待、退避和网络调用共享同一个调用 context 与默认 30 秒总期限。
+
+客户端可注入并发安全的 `tushare.Observer` 接收脱敏查询摘要，供日志或指标适配器使用。摘要包含随机本地 `request_id`、脱敏后的 `api_name`、包含等待/退避在内的总时延、行数、业务日期和错误分类；业务日期只从 `trade_date`、`start_date`、`end_date` 白名单参数中提取。Observer 不接收 Token、请求体、任意参数或 provider 原始消息。该接口本身不绑定具体日志或指标后端；指标适配器不得将 request_id 或业务日期作为标签。
 
 实现核验时，Tushare 官方 HTTP 页面仍以 `http://api.tushare.pro` 为请求示例；本项目保持文档指定的 HTTPS 默认并禁止自动降级，以免明文发送 Token。真实 TLS 连通性与 provider 权限尚未验证，后续真实调用若不能使用 TLS，需先明确安全决策再调整传输限制。
 
