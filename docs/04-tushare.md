@@ -1,16 +1,31 @@
 # 04 — Tushare 2000 积分取数协议与数据治理
 
-## 权限表（以实际 Token 调用为最终准绳）
-- `stock_basic`：证券基础资料，2000 积分起，**每分钟 50 次**（单接口独立限流）；建议 `list_status=L,D,P` 各自按需拉取，不只取 L，否则历史幸存者偏差。官方：https://tushare.pro/document/1?doc_id=25
-- `trade_cal`：沪深交易日；https://tushare.pro/document/2?doc_id=26
-- `daily`：未复权日线，`amount` 为**千元**、`vol` 为手，停牌日无记录，按 `trade_date` 拉全市场；https://tushare.pro/document/2?doc_id=27
-- `adj_factor`：个股复权因子，支持按日拉取全市场；https://tushare.pro/document/2?doc_id=28
-- `daily_basic`：估值扩展预留，第一版策略不强依赖；https://tushare.pro/document/2?doc_id=32
-- `suspend_d`：停复牌，2000 积分可用，单次约5000记录；https://tushare.pro/document/2?doc_id=214
-- `stk_limit`：涨跌停价，2000 积分可用，后续回测成交约束；https://tushare.pro/document/2?doc_id=183
-- `namechange`：曾用名，可作为 ST 研究辅助，但**不可保证完整准确还原每个历史 ST 状态**；应先验权再使用。
-- `stock_st`：3000 积分起，不可作为当前 2000 方案前提；https://tushare.pro/document/2?doc_id=397
-- `pro_bar`：Python SDK 的组合接口，无法直接使用 HTTP；Go 应使用 `daily` + `adj_factor`；https://tushare.pro/document/1?doc_id=109
+## 权限分级与实测状态
+
+下表记录官方文档所列的最低积分门槛，不代表本项目当前 Token 已获得权限。Tushare 说明积分门槛是基础权限级别，实际可用频次随积分变化；只有经人工授权的真实 Token 请求才能把账户状态从 `NOT_TESTED` 更新为实测结果。完整权限矩阵与本次阻塞原因见 [`../handoffs/permission-matrix.md`](../handoffs/permission-matrix.md) 和 [`../handoffs/P03-04-live-smoke.md`](../handoffs/P03-04-live-smoke.md)。
+
+| API | 分级 | 官方文档最低积分 | 当前 Token 实测 |
+|---|---|---:|---|
+| `stock_basic` | 核心 | 2000 | `NOT_TESTED` |
+| `trade_cal` | 核心 | 2000 | `NOT_TESTED` |
+| `daily` | 核心 | 120 | `NOT_TESTED` |
+| `adj_factor` | 核心 | 2000 | `NOT_TESTED` |
+| `suspend_d` | 可选 | 2000 | `NOT_TESTED` |
+| `stk_limit` | 可选 | 2000 | `NOT_TESTED` |
+| `namechange` | 可选 | 官方接口页未列最低积分 | `NOT_TESTED` |
+| `stock_st` | 高门槛、非核心 | 3000 | `NOT_TESTED`；没有 3000 权限证据时不得调用 |
+
+来源：官方 [API 权限总表](https://tushare.pro/document/1?doc_id=108)、[stock_basic](https://tushare.pro/document/1?doc_id=25)、[trade_cal](https://tushare.pro/document/2?doc_id=26)、[daily](https://tushare.pro/document/2?doc_id=27)、[adj_factor](https://tushare.pro/document/2?doc_id=28)、[suspend_d](https://tushare.pro/document/2?doc_id=214)、[stk_limit](https://tushare.pro/document/2?doc_id=183)、[stock_st](https://tushare.pro/document/2?doc_id=397) 和 [namechange](https://tushare.pro/wctapi/documents/100.md)。官方页面核对日期：2026-10-09。`stock_basic` 每分钟请求次数另受账户积分频次与本项目独立限流控制，不应把调用频率与最低积分混为一项。
+
+- `stock_basic`：证券基础资料；建议 `list_status=L,D,P` 各自按需拉取，不只取 L，否则会引入历史幸存者偏差。
+- `trade_cal`：沪深交易日历。
+- `daily`：未复权日线，`amount` 为千元、`vol` 为手；停牌日没有日线记录，按 `trade_date` 拉全市场。
+- `adj_factor`：个股复权因子，支持按日拉取全市场。
+- `suspend_d`：停复牌事件，单次约 5000 条记录。
+- `stk_limit`：涨跌停价，供后续回测成交约束使用。
+- `namechange`：曾用名，可作为 ST 研究辅助，但**不可保证完整准确还原每个历史 ST 状态**；当前官方接口页未列积分门槛，须以账户实测为准。
+- `stock_st`：官方文档要求 3000 积分起，不作为当前 2000 积分方案的前提。
+- `pro_bar`：Python SDK 的组合接口，无法直接使用 HTTP；Go 使用 `daily` + `adj_factor`。
 
 ## HTTP 契约
 POST `https://api.tushare.pro`（如证书或地址文档更新，使用配置覆盖）；`{"api_name":"daily","token":"<SECRET>","params":{"trade_date":"20261008"},"fields":"ts_code,trade_date,open,high,low,close,vol,amount"}`。响应含 `code,msg,data.fields,data.items`。以返回 `fields` 索引解析 `items`，不依赖固定列序；未知字段兼容、必需字段缺失报错。官方：https://tushare.pro/document/1?doc_id=40

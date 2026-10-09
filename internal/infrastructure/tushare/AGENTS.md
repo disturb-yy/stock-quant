@@ -14,3 +14,5 @@
 - `suspend_d` 保留 S/R 事件语义；`stk_limit` 和 `suspend_d` 仅做 DTO/验证，不扩建持久化表或每日状态推断。
 - 使用调用方 context 和有界默认超时；明文 HTTP 仅允许 loopback 测试 endpoint。
 - 使用 `shared/apperror` 分类错误；错误信息不得包含 Token、请求体或未脱敏 provider 消息。
+- `LookupAPIRequirement` 只描述官方公开门槛和接口分级，不证明当前 Token 权限；`stock_st` 标记为 3000 积分高门槛接口。
+- 没有明确人工授权和本地 Token 时不得发送真实 provider 请求；Mock/offline 状态不得报告为真实同步成功。
