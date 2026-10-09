@@ -4,7 +4,7 @@ Stock Quant 是面向 A 股、以日线为频率的量化研究平台。平台�
 
 ## 项目状态
 
-项目按 [`tickets/ORDER.md`](tickets/ORDER.md) 中的顺序逐项实施。P00 本地工程基线已实现并通过独立审查，但阶段门禁仍处于阻塞状态：需要在 GitHub 仓库中验证托管 Actions 工作流，并确认服务端分支保护会阻止检查失败的合并。已批准的规格见 [`docs/`](docs/)，已完成工作的证据记录在 `handoffs/completed/`。源指南中的示例用于演示 Go/Python JSON 交互，不是生产运行器或平台，也不作为本仓库的实现证据。
+项目按 [`tickets/ORDER.md`](tickets/ORDER.md) 中的顺序逐项实施。P00 工程基线已通过本地及 GitHub Actions 检查，并已为 `main` 配置 PR 和必需状态检查保护。阶段证据见 [`handoffs/completed/P00-gate.md`](handoffs/completed/P00-gate.md)。已批准的规格见 [`docs/`](docs/)，已完成工作的证据记录在 `handoffs/completed/`。源指南中的示例用于演示 Go/Python JSON 交互，不是生产运行器或平台，也不作为本仓库的实现证据。
 
 ## 项目范围
 
