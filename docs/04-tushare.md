@@ -57,8 +57,8 @@ POST `https://api.tushare.pro`（如证书或地址文档更新，使用配置�
 - 必须记录 `api_name`、request_id、接口时延、返回行数、业务日期、错误分类；**不能**记录 Token。
 
 ## 初始回填 / 增量同步
-1. 首先拉交易日历、全部历史证券状态并维护历史身份。
-2. 以交易日期批量拉取 `daily`、`adj_factor`，按日期逐日处理、存储，单日结果标记齐备之后可进入下游；`daily_basic` 可作为非关键扩展。
+1. P04-01 提供显式 `go run ./cmd/stockquant sync initial --from-date YYYY-MM-DD --through-date YYYY-MM-DD` 命令。它要求 `DATA_PROVIDER=tushare`、`TUSHARE_TOKEN` 和已完成迁移的 MySQL；每次按 L/D/P 拉取 `stock_basic`，再按 SSE/SZSE 与自然年切片拉取闭区间 `trade_cal`，并校验每个交易所返回了范围内的全部日历日期。结果经幂等 Upsert 写入股票身份与交易日历。它不请求 `daily` 或 `adj_factor`，也不自动运行迁移。相同代码跨状态时按 D>L>P 确定身份状态并保留退市日；D 状态没有退市日或身份日期冲突时视为数据不完整，在写入前失败。
+2. 后续以交易日期批量拉取 `daily`、`adj_factor`，按日期逐日处理、存储，单日结果标记齐备之后可进入下游；`daily_basic` 可作为非关键扩展。
 3. 每日按数据齐备检查触发，不仅依赖 `18:30` 固定时间；T 日复权因子存在盘前维护特性，需校验 T 日数据存在。
 4. `sync_job` 管理游标 / 状态、计数、数据校验、重试；断点重跑 `UPSERT`；任何异常日期不得默默跳过。
 5. `daily` 单日无数据不等于一定停牌；对上市股票根据日历+停牌公告区分，并保存缺失原因。需要设置“预期股票范围”，按上市/退市日期，不与当前上市集合比较。

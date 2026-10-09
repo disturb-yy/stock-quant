@@ -48,6 +48,14 @@ APP_ENV=development make migrate-up
 APP_ENV=development make migrate-down
 ```
 
+首次导入股票身份与交易日历时，显式执行 `stockquant sync initial`。该命令需要 `DATA_PROVIDER=tushare`、`TUSHARE_TOKEN` 和 MySQL 配置；日期范围采用闭区间，股票状态会拉取 L/D/P，交易日历覆盖 SSE/SZSE。它只同步股票基础信息和交易日历，不请求日线行情，也不会自动执行数据库迁移。运行前请先按环境说明配置变量，并确认目标数据库已完成迁移：
+
+```bash
+go run ./cmd/stockquant sync initial --from-date 1990-01-01 --through-date 2026-10-09
+```
+
+该命令会输出写入行数，不会回显 Token 或连接配置。重复执行通过仓储 Upsert 更新已有身份和日历记录。
+
 当前 `health` 命令返回 `{"status":"ok","scope":"process"}`，只表示进程级存活；它不检查 MySQL、Tushare 或 HTTP 是否就绪。迁移不会随应用启动自动运行；`migrate-down` 只允许在 `APP_ENV=development` 或 `APP_ENV=test` 时显式调用。
 
 `make check` 是 GitHub Actions 质量门的本地对应检查。测试位置和证据要求见 [`docs/testing.md`](docs/testing.md)。

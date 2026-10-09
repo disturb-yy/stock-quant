@@ -9,7 +9,7 @@
 | 通用交易日期与精确数值 | `internal/shared/types/` | 日期格式互转、精确十进制 JSON/SQL、DECIMAL 校验、显式 float64 计算边界 |
 | 稳定错误分类 | `internal/shared/apperror/` | 跨层错误码与 cause 链 |
 | 市场/因子/选股/回测 ports | `internal/market/ports/`, `internal/factor/ports/`, `internal/screening/ports/`, `internal/backtest/ports/` | 应用与行情、同步任务、因子执行及运行结果存储的接口边界 |
-| Go CLI 与 Composition Root | `cmd/stockquant/`, `internal/app/` | 命令入口、用例组装 |
+| Go CLI 与 Composition Root | `cmd/stockquant/`, `internal/app/` | 命令入口、用例组装、显式初始股票身份/沪深交易日历同步 |
 | 市场与策略领域 | `internal/market/domain/`, `internal/factor/domain/`, `internal/strategy/momentum/domain/` | P02 行情实体、P06/P07 因子与策略 |
 | 选股与回测领域 | `internal/screening/domain/`, `internal/backtest/domain/` | P06/P07/P10 |
 | 技术适配器 | `internal/infrastructure/` | MySQL 精确 DECIMAL 仓储/迁移、Tushare HTTP/DTO/映射/限流/重试、Python Runner、scheduler |
