@@ -231,9 +231,25 @@ func TestStockRepositoryKeepsDelistedHistoricalIdentityMySQL(t *testing.T) {
 	if err := stocks.Upsert(ctx, []domain.Stock{stock}); err != nil {
 		t.Fatalf("upsert delisted stock: %v", err)
 	}
+	if err := stocks.Upsert(ctx, []domain.Stock{stock}); err != nil {
+		t.Fatalf("repeat delisted stock upsert: %v", err)
+	}
 	got, err := stocks.Find(ctx, stock.TSCode)
 	if err != nil || got.TSCode != stock.TSCode || got.ListStatus != "D" || got.DelistDate == nil || *got.DelistDate != *stock.DelistDate {
 		t.Fatalf("delisted stock = %#v, error %v", got, err)
+	}
+	stock.Name = "历史证券（更新）"
+	stock.UpdatedAt = stock.UpdatedAt.Add(time.Minute)
+	if err := stocks.Upsert(ctx, []domain.Stock{stock}); err != nil {
+		t.Fatalf("update stock identity: %v", err)
+	}
+	got, err = stocks.Find(ctx, stock.TSCode)
+	if err != nil || got.Name != stock.Name || got.UpdatedAt != stock.UpdatedAt {
+		t.Fatalf("updated stock = %#v, error %v", got, err)
+	}
+	var stockCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM t_stock WHERE ts_code=?`, stock.TSCode).Scan(&stockCount); err != nil || stockCount != 1 {
+		t.Fatalf("stock rows = %d, error %v; want one idempotent row", stockCount, err)
 	}
 	daily, err := NewDailyPriceRepository(db)
 	if err != nil {

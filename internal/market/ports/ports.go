@@ -18,6 +18,12 @@ type MarketDataProvider interface {
 	TradingDates(ctx context.Context, from, through types.TradingDate) ([]types.TradingDate, error)
 }
 
+// InitialMarketDataProvider 获取股票身份快照和交易所日历。
+type InitialMarketDataProvider interface {
+	StockBasics(ctx context.Context, listStatus string) ([]domain.Stock, error)
+	TradeCalendars(ctx context.Context, exchange string, from, through types.TradingDate) ([]domain.TradeCalendar, error)
+}
+
 // StockRepository persists security identity and supports historical lookup regardless of current listing status.
 type StockRepository interface {
 	Upsert(ctx context.Context, stocks []domain.Stock) error
