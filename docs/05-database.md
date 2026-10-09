@@ -1,6 +1,6 @@
 # 05 — 数据库与迁移设计
 
-数据库：MySQL 8.4，字符集 utf8mb4，时区所有事件 `UTC` datetime(6)，**业务交易日 DATE** 独立存储。统一表前缀 `t_`。建表结构以 `db/migrations/0001.up.sql` 为准；迁移版本内容提交后不可修改。
+数据库：MySQL 8.4，字符集 utf8mb4，时区所有事件 `UTC` datetime(6)，**业务交易日 DATE** 独立存储。统一表前缀 `t_`。当前结构由 `db/migrations/0001.up.sql` 与 `db/migrations/0002.up.sql` 共同定义；已提交迁移版本不可修改，后续变更新增版本。
 
 ## 表与聚合
 - `t_schema_migrations`：迁移执行器维护的版本账本，记录版本号、不可变文件 checksum、dirty 状态和执行方向；down 不删除此账本。
@@ -9,12 +9,12 @@
 - `t_daily_price`：`(ts_code,trade_date)` 唯一；未复权 OHLC、`amount_yuan`（元）、`volume_lot`（手）、`source_hash`、`revision`、`fetched_at`。仓储接收已转换为元的金额，不再乘 1000。
 - `t_adj_factor`：`(ts_code,trade_date)` 唯一；正值、`source_hash`、`revision`、`fetched_at`。
 - `t_stock_status_daily`：按日 ST、停牌状态与可信度、来源；`UNKNOWN` 必须有状态，不用 boolean 默认 false。
-- `t_sync_job`：task_key 唯一（source/api/date），status/attempts/requested_at/received_rows/expected_rows/quality_report_json/last_error。重跑复用键。
+- `t_sync_job`：task_key 唯一（source/api/date），status/attempts/requested_at/received_rows/expected_rows/quality_report_json/last_error。同键提交返回已有任务；仅 PENDING 可进入 RUNNING，开始执行时 attempts 加一；RUNNING 可到 SUCCESS/FAILED/BLOCKED，终态不覆盖，失败重试使用新 task_key。
 - `t_data_snapshot`：snapshot_id, as_of, revision/hash, complete, st_quality, created_at。冻结该次运行的关键数据与状态摘要；完整复现需保留对应数据版本或不可变导出引用。
 - `t_strategy`：strategy id+version，参数 JSON、config_hash；已用于 run 的版本不原地覆盖。
-- `t_screening_run`：唯一 run_key 代表策略版本+日期+config_hash+snapshot_hash。job 状态及拒绝原因摘要。
+- `t_screening_run`：唯一 run_key 代表策略版本+日期+config_hash+snapshot_hash。同键提交返回已有运行；状态为 PENDING/RUNNING/SUCCESS/FAILED/BLOCKED，成功、失败和阻塞均为终态；运行结果、拒绝原因摘要和 SUCCESS 在同一事务提交。
 - `t_screening_result`：run_id+ts_code 唯一，raw_factors_json, factor_scores_json, total_score, final_rank, reason_json；存**全量筛后候选**或分表记录拒绝列表，不能只保留 Top20 而丢审计。
-- `t_backtest_run`：run_id, 日期区间、执行/手续费配置、基准、metrics、数据版本。
+- `t_backtest_run`：run_id、唯一 run_key、策略版本、日期区间、config_hash、snapshot_hash、模式、状态、metrics/risk 和错误摘要。run_key 为策略、版本、日期区间、配置摘要、数据快照摘要和模式的 SHA-256；同键提交返回已有运行。0002 为旧记录按 run_id 确定性补入 run_key；旧记录未知的 snapshot_hash 保持 NULL，新运行必须绑定有效快照摘要。
 - `t_backtest_equity`：run_id/date -> equity, cash, exposure, benchmark_equity。
 - `t_backtest_trade`：交易意向、实际成交、拒绝原因、费用、数量、成交价。
 
@@ -27,7 +27,8 @@
 
 ## 一致性与索引
 - 同步单日 bulk UPSERT in transaction；标记 synced 只有在记录落库且校验通过之后。
-- `t_screening_run` status = `PENDING|RUNNING|SUCCESS|FAILED|BLOCKED`；先 INSERT/RUNNING，再结果 batch 保存，最后原子设置 SUCCESS；中途失败不能让 UI 看到半结果。
+- `t_screening_run` status = `PENDING|RUNNING|SUCCESS|FAILED|BLOCKED`；先 INSERT，再由 PENDING 进入 RUNNING；结果 batch、运行总数、拒绝摘要和 SUCCESS 原子保存，中途失败不能留下半结果。结果分页按 final_rank 升序，未排名结果最后，再按 ts_code 升序。
+- `t_backtest_run` 使用与筛选相同的受限状态流转；同键唯一性由数据库约束保障。迁移 0002 可安全重试，回滚只移除新增列和索引，不删除既有回测记录。
 - 关键查询索引：date+ts_code、strategy+as_of、run_id+rank；JSON 字段不作第一版热点过滤。
 - 并发单运行 `run_key UNIQUE` 防重，冲突由唯一键决定，禁止先查后插竞争；多实例扩展可加租约，但首版单实例。
 

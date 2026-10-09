@@ -1,7 +1,7 @@
 # 10 — 任务编排、可观测和运维
 
 ## 任务状态机
-`PENDING -> RUNNING -> SUCCESS|FAILED|BLOCKED|CANCELLED`。不可逆的 `SUCCESS` 不能回到 RUNNING；失败重试创建新的 attempt 或保留相同 job 并递增 attempt，最终记录 must distinguish each run。对于日频同步先校验 `trade_cal` 开市，再按 `stock_basic/status`, `daily`, `adj_factor`, optional `daily_basic` 顺序，最后 `quality` 和 `screen`。
+P02-03 存储层使用 `PENDING -> RUNNING -> SUCCESS|FAILED|BLOCKED`；这些终态不可覆盖，失败重试创建新 task_key/run_key，使每次运行有独立记录。`CANCELLED` 仅在后续票据定义取消行为后加入持久化状态流。对于日频同步先校验 `trade_cal` 开市，再按 `stock_basic/status`, `daily`, `adj_factor`, optional `daily_basic` 顺序，最后 `quality` 和 `screen`。
 
 ## 触发
 收盘后自动触发 (例 18:30 Asia/Shanghai)，但不能以到点作为数据完整证据。`Tushare daily` 和 `daily_basic` 可能不同步；同步/复权数据 ready 后选股。节假日和非交易日 SKIPPED（不算失败）。支持 CLI/HTTP 手动补指定日期。

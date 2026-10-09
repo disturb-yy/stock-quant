@@ -8,7 +8,7 @@
 | 跨语言 JSON 协议与 DTO | `contracts/`, `python/stockquant/protocol.py` | P01/P08 请求与响应校验、编码和解码 |
 | 通用交易日期与元金额 | `internal/shared/types/` | 日期格式互转、显式时区提取、金额有限值校验 |
 | 稳定错误分类 | `internal/shared/apperror/` | 跨层错误码与 cause 链 |
-| 市场/因子/选股 ports | `internal/market/ports/`, `internal/factor/ports/`, `internal/screening/ports/` | 应用与行情、因子执行及结果存储的接口边界 |
+| 市场/因子/选股/回测 ports | `internal/market/ports/`, `internal/factor/ports/`, `internal/screening/ports/`, `internal/backtest/ports/` | 应用与行情、同步任务、因子执行及运行结果存储的接口边界 |
 | Go CLI 与 Composition Root | `cmd/stockquant/`, `internal/app/` | 命令入口、用例组装 |
 | 市场与策略领域 | `internal/market/domain/`, `internal/factor/domain/`, `internal/strategy/momentum/domain/` | P02 行情实体、P06/P07 因子与策略 |
 | 选股与回测领域 | `internal/screening/domain/`, `internal/backtest/domain/` | P06/P07/P10 |
@@ -17,7 +17,7 @@
 | Go/Python 体系结构 | `docs/02-architecture.md` | package、依赖设计 |
 | 四因子精确定义 | `docs/03-strategy-spec.md` | 因子、过滤、评分、回测 |
 | Tushare 接口/积分/质量 | `docs/04-tushare.md` | Tushare/行情任务 |
-| SQL 与仓储 | `docs/05-database.md`, `db/migrations/*`, `internal/infrastructure/mysql/` | P02/P04/P05/P09 |
+| SQL 与仓储 | `docs/05-database.md`, `db/migrations/*`, `internal/infrastructure/mysql/` | P02/P04/P05/P09；任务及筛选/回测运行持久化见 `run_repositories.go` |
 | REST API | `docs/06-api.md` | P09/P11 |
 | 跨语言运行契约 | `docs/07-python-protocol.md`, `contracts/*` | P01/P08 |
 | 回测交易语义 | `docs/08-backtest.md` | P10 |

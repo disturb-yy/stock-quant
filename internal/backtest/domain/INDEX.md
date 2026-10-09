@@ -2,4 +2,5 @@
 
 | File | Responsibility |
 |---|---|
-| `doc.go` | Declares the backtest domain package; behavior is introduced by later tickets |
+| `doc.go` | 声明回测领域包 |
+| `run.go` | 不可变回测输入、状态值和规范运行键 |
