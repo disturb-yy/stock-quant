@@ -5,3 +5,5 @@
 - Trusted Python strategy registration is owned by P08-04, not by the P01-03 scaffolding.
 - Do not add SQL, provider requests, HTTP handlers, or business rules here.
 - Keep process health distinct from database/provider readiness checks.
+- Database migrations are explicit `migrate up|down` commands; do not run them during health checks or application startup.
+- `migrate down` must reject environments other than `development` and `test`.

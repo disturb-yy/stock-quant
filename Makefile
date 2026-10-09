@@ -2,7 +2,7 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 GO_BUILDVCS_FLAG := $(if $(shell git rev-parse --show-toplevel 2>/dev/null),,-buildvcs=false)
 
-.PHONY: help setup-python doctor test test-go test-python test-tools test-config test-boundaries check build run
+.PHONY: help setup-python doctor test test-go test-python test-tools test-config test-boundaries check build run migrate-up migrate-down
 
 help:
 	@printf '%s\n' \
@@ -12,7 +12,9 @@ help:
 	  '  test          Run Go, Python, tool, and boundary checks' \
 	  '  check         Run the complete local CI quality gate' \
 	  '  build         Build Go packages (available as packages are added)' \
-	  '  run           Run the process-level health command'
+	  '  run           Run the process-level health command' \
+	  '  migrate-up    Apply pending MySQL migrations' \
+	  '  migrate-down  Roll back the latest migration in development/test'
 
 setup-python:
 	python3 -m venv .venv
@@ -58,3 +60,9 @@ build:
 
 run:
 	go run $(GO_BUILDVCS_FLAG) ./cmd/stockquant health
+
+migrate-up:
+	go run $(GO_BUILDVCS_FLAG) ./cmd/stockquant migrate up
+
+migrate-down:
+	go run $(GO_BUILDVCS_FLAG) ./cmd/stockquant migrate down

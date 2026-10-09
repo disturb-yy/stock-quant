@@ -7,7 +7,7 @@ make test
 make check
 ```
 
-`make test` runs Go tests, available Python tests, tool tests, provider configuration edge cases, and the domain import boundary checks. It does not require MySQL, network access, or a Tushare token. `make check` adds Go formatting, `go vet`, a build, and the repository secret scan.
+`make test` runs Go tests, available Python tests, tool tests, provider configuration edge cases, and the business import boundary checks. MySQL migration tests run against a real isolated database when `MYSQL_TEST_DSN` is set; otherwise they report a skip. `make check` adds Go formatting, `go vet`, a build, and the repository secret scan. GitHub Actions provides a disposable MySQL 8.4 service so CI always runs the database integration tests.
 
 ## Test placement and fixtures
 
