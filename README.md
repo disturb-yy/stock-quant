@@ -4,7 +4,7 @@ Stock Quant 是面向 A 股、以日线为频率的量化研究平台。平台�
 
 ## 项目状态
 
-项目按 [`tickets/ORDER.md`](tickets/ORDER.md) 中的顺序逐项实施。P00 工程基线和 P01 契约/领域接口已通过阶段门；P02-01 数据库迁移执行器与 P02-02 行情仓储已完成并合并，当前进入 P02-03。阶段证据见 [`handoffs/completed/P00-gate.md`](handoffs/completed/P00-gate.md)、[`handoffs/completed/P01-gate.md`](handoffs/completed/P01-gate.md) 和 [`handoffs/completed/P02-02.md`](handoffs/completed/P02-02.md)。已批准的规格见 [`docs/`](docs/)，已完成工作的证据记录在 `handoffs/completed/`。源指南中的示例用于演示 Go/Python JSON 交互，不是生产运行器或平台，也不作为本仓库的实现证据。
+项目按 [`tickets/ORDER.md`](tickets/ORDER.md) 中的顺序逐项实施。P00 工程基线、P01 契约/领域接口和 P02 MySQL/持久化均已通过阶段门；当前进入 P03-01（Tushare HTTP 封装与动态字段解析）。阶段证据见 [`handoffs/completed/P00-gate.md`](handoffs/completed/P00-gate.md)、[`handoffs/completed/P01-gate.md`](handoffs/completed/P01-gate.md) 和 [`handoffs/completed/P02-gate.md`](handoffs/completed/P02-gate.md)。已批准的规格见 [`docs/`](docs/)，已完成工作的证据记录在 `handoffs/completed/`。源指南中的示例用于演示 Go/Python JSON 交互，不是生产运行器或平台，也不作为本仓库的实现证据。
 
 ## 项目范围
 
