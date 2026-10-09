@@ -43,24 +43,11 @@ migrations/
 - Composition Root 在 `cmd/stockquant/main.go` 完成 wiring，领域不读全局配置。
 
 ## 核心接口（Go 意图，不是最终可编译实现）
-```go
-type SnapshotRepository interface {
-    Load(ctx context.Context, asOf TradingDate, lookback int) (Snapshot, error)
-}
-type FactorCalculator interface {
-    Calculate(bars []Bar) (RawFactors, error)
-}
-type FactorRunner interface {
-    Compute(ctx context.Context, req FactorRequest) (FactorResult, error)
-}
-type ScreeningEngine interface {
-    Select(ctx context.Context, req ScreenRequest) (ScreenResult, error)
-}
-type ScreeningRepository interface {
-    Save(ctx context.Context, result ScreenResult) error
-}
-```
-所有接口必须具有对输入日期、版本与批次的不可变表示；P01 冻结 `contracts` 后再落地结构体。接口较小，避免为了“未来会扩展”引入十余个空接口。
+当前最小接口放在所属 domain 的 `ports` package：market 提供快照读取与交易日历查询，factor 提供协议 v1 `FactorRunner`，screening 提供 `ScreeningStore.SaveRun`。`FactorRunner` 位于 worker 协议边界，使用已冻结的 `contracts` DTO；因子计算 domain 仍只依赖纯 bars。`ScreeningStore` 目前只保存运行身份元数据，不包含尚未实现的过滤、候选或评分结果。
+
+真实 adapter 可用后，由 `cmd/stockquant` 组合根选择并注入实现；领域包不维护全局可变注册表。受信任 Python 策略注册表属于 P08-04，不在 P01-03 提前实现。
+
+所有接口都应保留输入日期、版本与批次身份；接口保持精简，避免为了“未来会扩展”引入空接口。
 
 ## 错误分类
 稳定 code：`INVALID_ARGUMENT / DATA_INCOMPLETE / PERMISSION_DENIED / RATE_LIMITED / UPSTREAM_UNAVAILABLE / STRATEGY_FAILED / TIMEOUT / CANCELLED / INVALID_WORKER_RESPONSE / NOT_FOUND / CONFLICT / DATA_UNTRUSTED / INVALID_FACTOR_INPUT / INTERNAL`。跨层封装保留 cause 供 `errors.Is`/`errors.As` 诊断；API/CLI 对外消息由边界层安全映射，不得直接泄露 Token、DSN、绝对路径等敏感字段。可重试只对速率限制、网络中断与可恢复 5xx，禁止重试权限错误与公式错误。

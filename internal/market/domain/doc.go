@@ -1,2 +1,2 @@
-// Package domain contains market data business concepts and ports.
+// Package domain contains market data business concepts and immutable snapshots.
 package domain
