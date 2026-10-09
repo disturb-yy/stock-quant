@@ -117,26 +117,35 @@ func newRateLimiter(config RateLimitConfig, source clock) *rateLimiter {
 }
 
 func (limiter *rateLimiter) Wait(ctx context.Context, apiName string) error {
-	if err := ctx.Err(); err != nil {
-		return err
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		limiter.mu.Lock()
+		now := limiter.clock.Now()
+		apiInterval := limiter.defaultAPIInterval
+		if configured, exists := limiter.apiIntervals[apiName]; exists {
+			apiInterval = configured
+		}
+		deadline := now
+		if limiter.nextGlobal.After(deadline) {
+			deadline = limiter.nextGlobal
+		}
+		if limiter.nextAPI[apiName].After(deadline) {
+			deadline = limiter.nextAPI[apiName]
+		}
+		if !deadline.After(now) {
+			limiter.nextGlobal = now.Add(limiter.globalInterval)
+			limiter.nextAPI[apiName] = now.Add(apiInterval)
+			limiter.mu.Unlock()
+			return nil
+		}
+		wait := deadline.Sub(now)
+		limiter.mu.Unlock()
+		if err := limiter.clock.Sleep(ctx, wait); err != nil {
+			return err
+		}
 	}
-	now := limiter.clock.Now()
-	limiter.mu.Lock()
-	deadline := now
-	if limiter.nextGlobal.After(deadline) {
-		deadline = limiter.nextGlobal
-	}
-	if limiter.nextAPI[apiName].After(deadline) {
-		deadline = limiter.nextAPI[apiName]
-	}
-	limiter.nextGlobal = deadline.Add(limiter.globalInterval)
-	apiInterval := limiter.defaultAPIInterval
-	if configured, exists := limiter.apiIntervals[apiName]; exists {
-		apiInterval = configured
-	}
-	limiter.nextAPI[apiName] = deadline.Add(apiInterval)
-	limiter.mu.Unlock()
-	return limiter.clock.Sleep(ctx, deadline.Sub(now))
 }
 
 type retryableError struct{ err error }

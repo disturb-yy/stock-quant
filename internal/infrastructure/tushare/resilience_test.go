@@ -1,9 +1,11 @@
 package tushare
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -83,7 +85,13 @@ func TestTushareRateLimiterSerializesConcurrentReservations(t *testing.T) {
 	if !clock.WaitForSleep(t, requests-1) {
 		t.Fatal("concurrent requests did not reserve all serialized wait slots")
 	}
-	clock.Advance(10 * time.Second)
+	for remainingWaiters := requests - 2; remainingWaiters > 0; remainingWaiters-- {
+		clock.Advance(time.Second)
+		if !clock.WaitForSleep(t, remainingWaiters) {
+			t.Fatalf("%d concurrent calls did not re-wait after contending for one token", remainingWaiters)
+		}
+	}
+	clock.Advance(time.Second)
 	for range requests {
 		if err := <-results; err != nil {
 			t.Fatal(err)
@@ -125,6 +133,35 @@ func TestTushareRateLimiterWaitCancellationDoesNotSendRequest(t *testing.T) {
 	}
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("HTTP requests = %d, want only the first request", got)
+	}
+
+	thirdDone := make(chan error, 1)
+	go func() {
+		_, err := client.Query(context.Background(), QueryRequest{APIName: "daily"})
+		thirdDone <- err
+	}()
+	if !clock.WaitForSleep(t, 1) {
+		t.Fatal("third query did not wait for the slot freed by the cancelled call")
+	}
+	clock.Advance(59 * time.Second)
+	select {
+	case err := <-thirdDone:
+		t.Fatalf("third query completed before its slot: %v", err)
+	default:
+	}
+	clock.Advance(time.Second)
+	select {
+	case err := <-thirdDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		clock.Advance(time.Minute)
+		<-thirdDone
+		t.Fatal("cancelled request consumed a future rate-limit slot")
+	}
+	if got := requests.Load(); got != 2 {
+		t.Fatalf("HTTP requests = %d, want the first and third requests", got)
 	}
 }
 
@@ -320,6 +357,80 @@ func TestTushareObservationContainsOnlyAllowlistedRedactedFields(t *testing.T) {
 	}
 }
 
+func TestTushareQueryWritesSafeStructuredLog(t *testing.T) {
+	var output bytes.Buffer
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"code":0,"msg":"provider-message-secret","data":{"fields":["ts_code"],"items":[["000001.SZ"]]}}`)
+	}))
+	defer server.Close()
+	client, err := NewClient(ClientConfig{
+		Endpoint: server.URL,
+		Token:    "token-secret",
+		Logger:   slog.New(slog.NewJSONHandler(&output, nil)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(context.Background(), QueryRequest{APIName: "daily", Params: map[string]any{
+		"trade_date": "20261009", "token": "token-secret", "custom_param": "sensitive-param-value",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := output.String()
+	for _, secret := range []string{"token-secret", "sensitive-param-value", "provider-message-secret", "custom_param"} {
+		if strings.Contains(line, secret) {
+			t.Fatalf("structured log exposed %q: %s", secret, line)
+		}
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(output.Bytes(), &fields); err != nil {
+		t.Fatalf("decode structured log: %v", err)
+	}
+	for _, key := range []string{"request_id", "api_name", "duration", "row_count", "business_date", "error_class", "attempts"} {
+		if _, exists := fields[key]; !exists {
+			t.Errorf("structured log lacks %q: %v", key, fields)
+		}
+	}
+	if fields["api_name"] != "daily" || fields["business_date"] != "20261009" || fields["row_count"] != float64(1) || fields["attempts"] != float64(1) {
+		t.Fatalf("structured log values = %v", fields)
+	}
+}
+
+func TestTushareErrorLogOmitsProviderMessageAndErrorString(t *testing.T) {
+	var output bytes.Buffer
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"code":17,"msg":"provider-message-secret","data":null}`)
+	}))
+	defer server.Close()
+	client, err := NewClient(ClientConfig{
+		Endpoint: server.URL,
+		Token:    "token-secret",
+		Logger:   slog.New(slog.NewJSONHandler(&output, nil)),
+		Retry:    RetryConfig{MaxAttempts: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, queryErr := client.Query(context.Background(), QueryRequest{APIName: "daily"})
+	if queryErr == nil {
+		t.Fatal("expected provider rejection")
+	}
+	line := output.String()
+	for _, forbidden := range []string{"token-secret", "provider-message-secret", queryErr.Error()} {
+		if strings.Contains(line, forbidden) {
+			t.Fatalf("error log exposed %q: %s", forbidden, line)
+		}
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(output.Bytes(), &fields); err != nil {
+		t.Fatalf("decode structured error log: %v", err)
+	}
+	if fields["error_class"] != string(apperror.CodeUpstreamUnavailable) {
+		t.Fatalf("error_class = %v, want %s", fields["error_class"], apperror.CodeUpstreamUnavailable)
+	}
+}
+
 func TestTushareObservationRedactsTokenEmbeddedInAPINameAndDates(t *testing.T) {
 	var events []Observation
 	var mu sync.Mutex
@@ -415,9 +526,21 @@ func (clock *testClock) Sleep(ctx context.Context, delay time.Duration) error {
 	clock.mu.Unlock()
 	select {
 	case <-ctx.Done():
+		clock.removeWaiter(waiter)
 		return ctx.Err()
 	case <-waiter.done:
 		return ctx.Err()
+	}
+}
+
+func (clock *testClock) removeWaiter(target *testClockWaiter) {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	for index, waiter := range clock.waiters {
+		if waiter == target {
+			clock.waiters = append(clock.waiters[:index], clock.waiters[index+1:]...)
+			return
+		}
 	}
 }
 

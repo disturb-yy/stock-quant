@@ -19,7 +19,9 @@ POST `https://api.tushare.pro`（如证书或地址文档更新，使用配置�
 
 进程内限流同时应用 global 100 次/分钟和 per-api 默认 100 次/分钟，`stock_basic` 默认 40 次/分钟；配置可覆盖这些速率。令牌桶突发容量固定为 1，以平滑启动。每次实际 HTTP 尝试（包括重试）都重新取得 global 和对应 API 配额。重试默认最多 3 次尝试（含首次请求），对 HTTP 429、5xx 和明确瞬时网络错误使用指数退避与 full jitter；默认退避基数 100ms、上限 2s。权限码 2002、其他 provider 业务拒绝、参数错误、响应解析错误、取消和期限到达均不重试。限流等待、退避和网络调用共享同一个调用 context 与默认 30 秒总期限。
 
-客户端可注入并发安全的 `tushare.Observer` 接收脱敏查询摘要，供日志或指标适配器使用。摘要包含随机本地 `request_id`、脱敏后的 `api_name`、包含等待/退避在内的总时延、行数、业务日期和错误分类；业务日期只从 `trade_date`、`start_date`、`end_date` 白名单参数中提取。Observer 不接收 Token、请求体、任意参数或 provider 原始消息。该接口本身不绑定具体日志或指标后端；指标适配器不得将 request_id 或业务日期作为标签。
+客户端默认使用 `slog.Default()` 写入结构化查询结束日志，也可注入 `*slog.Logger`。日志只包含随机本地 `request_id`、脱敏后的 `api_name`、包含等待/退避在内的总时延、行数、业务日期、错误分类和尝试次数；业务日期只从 `trade_date`、`start_date`、`end_date` 白名单参数中提取。日志不包含错误字符串、Token、请求体、任意参数或 provider 原始消息。
+
+客户端还可注入并发安全的 `tushare.Observer` 接收同一组脱敏查询摘要，供指标适配器使用。Observer 不接收 Token、请求体、任意参数或 provider 原始消息。指标适配器不得将 request_id 或业务日期作为标签。
 
 实现核验时，Tushare 官方 HTTP 页面仍以 `http://api.tushare.pro` 为请求示例；本项目保持文档指定的 HTTPS 默认并禁止自动降级，以免明文发送 Token。真实 TLS 连通性与 provider 权限尚未验证，后续真实调用若不能使用 TLS，需先明确安全决策再调整传输限制。
 

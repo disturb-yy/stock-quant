@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -31,6 +32,7 @@ type ClientConfig struct {
 	RateLimits RateLimitConfig
 	Retry      RetryConfig
 	Observer   Observer
+	Logger     *slog.Logger
 }
 
 // Client sends Tushare Pro JSON requests and parses returned field names.
@@ -42,6 +44,7 @@ type Client struct {
 	limiter  *rateLimiter
 	retry    RetryConfig
 	observer Observer
+	logger   *slog.Logger
 	clock    clock
 }
 
@@ -109,6 +112,10 @@ func newClientWithClock(config ClientConfig, source clock) (*Client, error) {
 	if source == nil {
 		source = realClock{}
 	}
+	logger := config.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
 	httpClient := config.HTTPClient
 	if httpClient == nil {
 		httpClient = http.DefaultClient
@@ -117,7 +124,8 @@ func newClientWithClock(config ClientConfig, source clock) (*Client, error) {
 	safeHTTPClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
 	return &Client{
 		endpoint: endpoint, token: config.Token, http: &safeHTTPClient, timeout: config.Timeout,
-		limiter: newRateLimiter(config.RateLimits, source), retry: normalizeRetryConfig(config.Retry), observer: config.Observer, clock: source,
+		limiter: newRateLimiter(config.RateLimits, source), retry: normalizeRetryConfig(config.Retry),
+		observer: config.Observer, logger: logger, clock: source,
 	}, nil
 }
 
@@ -162,10 +170,23 @@ func (client *Client) Query(ctx context.Context, query QueryRequest) ([]Row, err
 	if err != nil {
 		observation.ErrorClass = string(apperror.CodeOf(err))
 	}
+	client.logObservation(observation)
 	if client.observer != nil {
 		client.observer.Observe(observation)
 	}
 	return rows, err
+}
+
+func (client *Client) logObservation(event Observation) {
+	client.logger.Info("Tushare query finished",
+		slog.String("request_id", event.RequestID),
+		slog.String("api_name", event.APIName),
+		slog.Duration("duration", event.Duration),
+		slog.Int("row_count", event.RowCount),
+		slog.String("business_date", event.BusinessDate),
+		slog.String("error_class", event.ErrorClass),
+		slog.Int("attempts", event.Attempts),
+	)
 }
 
 func (client *Client) queryWithRetry(ctx context.Context, query QueryRequest, body []byte) ([]Row, int, error) {
