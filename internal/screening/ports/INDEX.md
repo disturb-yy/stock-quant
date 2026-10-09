@@ -2,5 +2,5 @@
 
 | 文件 | 职责 |
 |---|---|
-| `store.go` | 保存筛选运行身份元数据的 ScreeningStore 接口 |
-| `store_test.go` | fake store 对运行身份元数据的接收测试 |
+| `store.go` | 筛选运行幂等创建、状态和结果存取接口 |
+| `store_test.go` | ScreeningStore fake 契约测试 |

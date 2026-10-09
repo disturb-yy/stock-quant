@@ -3,7 +3,7 @@
 ## 统一规则
 - 前缀 `/api/v1`，JSON，业务日期 RFC3339 不适用：统一 `YYYY-MM-DD` 字符串。
 - 统一错误 envelope：`{"error":{"code":"DATA_INCOMPLETE","message":"...","request_id":"...","details":{}}}`；可追踪不泄露秘密。
-- GET 幂等；POST 执行任务返回 202 + `run_id`，相同 `Idempotency-Key` + 请求内容返回既有任务。
+- GET 幂等；POST 执行任务返回 202 + `run_id`，相同 `Idempotency-Key` 和请求内容返回既有任务。底层 sync 使用 `task_key`，screen 使用 `run_key`，backtest 使用策略版本、日期区间、配置摘要、模式与 `snapshot_hash` 生成 SHA-256 run_key；唯一键冲突时返回已有运行。
 - 列表支持 `limit` (1..100，默认20)、`offset` (>=0)。排序和筛选只允许白名单字段。
 
 ## API 列表及示例
@@ -39,9 +39,9 @@
 
 ## 状态与错误矩阵
 - 输入日期非交易日、窗口过短、无数据：422 `INVALID_ARGUMENT` / `DATA_INCOMPLETE`。
-- 同一请求提交重复：相同 Idempotency-Key 返回旧任务，不重新计算；不同 key 但相同 run_key，可返回既有结果或 409，必须约定并测试。
+- 同一请求提交重复：相同 Idempotency-Key 返回旧任务，不重新计算；底层相同 task_key/run_key 返回既有任务或运行，不创建第二条记录。
 - 策略版本不存在：404 `NOT_FOUND`；当前权限不足：403 `PERMISSION_DENIED`。
-- 计算超时：run 转 `FAILED`，查询状态不能返回半结果。
+- 任务仅允许 `PENDING -> RUNNING -> SUCCESS|FAILED|BLOCKED`；SUCCESS/FAILED/BLOCKED 为终态，失败重试使用新任务键。筛选结果页按 rank 升序、未排名行最后、股票代码升序；结果、汇总和 SUCCESS 同一事务提交。计算中断时不能查询到半份成功结果。
 
 ## 验收 curl（生产代码实现后）
 ```bash

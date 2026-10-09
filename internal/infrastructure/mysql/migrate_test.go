@@ -41,6 +41,10 @@ func TestMigrateUpDownRepeatMySQL(t *testing.T) {
 	})
 	assertIndexExists(t, ctx, db, "t_daily_price", "idx_daily_by_date")
 	assertMigrationState(t, ctx, db, 1, false, "up")
+	assertMigrationState(t, ctx, db, 2, false, "up")
+	assertColumnExists(t, ctx, db, "t_backtest_run", "run_key")
+	assertColumnExists(t, ctx, db, "t_backtest_run", "snapshot_hash")
+	assertIndexExists(t, ctx, db, "t_backtest_run", "uq_backtest_run_key")
 
 	if err := migrator.Up(ctx); err != nil {
 		t.Fatalf("repeated up: %v", err)
@@ -52,20 +56,29 @@ func TestMigrateUpDownRepeatMySQL(t *testing.T) {
 	if err := migrator.Down(ctx); err != nil {
 		t.Fatalf("down: %v", err)
 	}
-	if got := countTables(t, ctx, db); got != 2 {
-		t.Fatalf("table count after down = %d, want unrelated fixture and migration ledger", got)
+	if got := countTables(t, ctx, db); got != 15 {
+		t.Fatalf("table count after rolling back migration 2 = %d, want migration 1 tables, ledger, and unrelated fixture", got)
 	}
 	if exists := tableExists(t, ctx, db, "unrelated_fixture"); !exists {
 		t.Fatal("down removed a table not created by the migration")
 	}
-	if exists := tableExists(t, ctx, db, "t_stock"); exists {
-		t.Fatal("down left a table created by migration 1")
+	if exists := tableExists(t, ctx, db, "t_stock"); !exists {
+		t.Fatal("rolling back migration 2 removed a table from migration 1")
+	}
+	if exists := columnExists(t, ctx, db, "t_backtest_run", "run_key"); exists {
+		t.Fatal("migration 2 down left run_key")
+	}
+	if err := migrator.Down(ctx); err != nil {
+		t.Fatalf("down migration 1: %v", err)
+	}
+	if got := countTables(t, ctx, db); got != 2 {
+		t.Fatalf("table count after all down migrations = %d, want unrelated fixture and migration ledger", got)
 	}
 
 	if err := migrator.Up(ctx); err != nil {
 		t.Fatalf("up after down: %v", err)
 	}
-	assertMigrationState(t, ctx, db, 1, false, "up")
+	assertMigrationState(t, ctx, db, 2, false, "up")
 }
 
 func TestMigrateFailedUpCanResumeMySQL(t *testing.T) {
@@ -98,6 +111,49 @@ func TestMigrateFailedUpCanResumeMySQL(t *testing.T) {
 	var indexes int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 't_recovery_base' AND index_name = 'idx_recovery'").Scan(&indexes); err != nil || indexes != 1 {
 		t.Fatalf("recovered migration index count = %d, %v; want 1", indexes, err)
+	}
+}
+
+func TestBacktestIdentityMigrationPreservesLegacyRowsMySQL(t *testing.T) {
+	db := openIsolatedMySQL(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	migrationsToApply, err := LoadMigrations(migrations.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	migrationOne := &Migrator{DB: db, Migrations: migrationsToApply[:1]}
+	if err := migrationOne.Up(ctx); err != nil {
+		t.Fatalf("apply migration 1: %v", err)
+	}
+	const legacyID = "00000000000000000000000001"
+	if _, err := db.ExecContext(ctx, `INSERT INTO t_backtest_run (run_id,strategy_id,strategy_version,start_date,end_date,config_hash,mode,status,metrics_json,risk_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, legacyID, "legacy", "1.0", "2026-01-01", "2026-01-02", strings.Repeat("a", 64), "research_only", "SUCCESS", `{"return":0.1}`, nil, "2026-01-02 00:00:00", "2026-01-02 00:00:00"); err != nil {
+		t.Fatalf("insert legacy backtest row: %v", err)
+	}
+	if err := newEmbeddedMigrator(t, db).Up(ctx); err != nil {
+		t.Fatalf("apply backtest identity migration: %v", err)
+	}
+	var runKey string
+	var snapshot sql.NullString
+	var status string
+	var runID string
+	if err := db.QueryRowContext(ctx, "SELECT run_id,run_key,snapshot_hash,status FROM t_backtest_run WHERE run_id=?", legacyID).Scan(&runID, &runKey, &snapshot, &status); err != nil {
+		t.Fatalf("read migrated legacy run: %v", err)
+	}
+	var wantKey string
+	if err := db.QueryRowContext(ctx, "SELECT SHA2(CONCAT('legacy:',?),256)", legacyID).Scan(&wantKey); err != nil {
+		t.Fatal(err)
+	}
+	if runID != legacyID || runKey != wantKey || snapshot.Valid || status != "SUCCESS" {
+		t.Fatalf("legacy row after migration = (%s,%s,%v,%s), want preserved identity/status and null unknown snapshot", runID, runKey, snapshot, status)
+	}
+	repository, err := NewBacktestRunRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyRun, err := repository.Find(ctx, legacyID)
+	if err != nil || legacyRun.RunKey != wantKey || legacyRun.SnapshotHash != "" || legacyRun.Status != "SUCCESS" {
+		t.Fatalf("repository read of legacy run = %#v, %v", legacyRun, err)
 	}
 }
 
@@ -140,6 +196,16 @@ func TestMigrateUnavailableDatabaseReturnsCause(t *testing.T) {
 
 func openIsolatedMySQL(t *testing.T) *sql.DB {
 	t.Helper()
+	return openIsolatedMySQLWithOptions(t, false)
+}
+
+func openIsolatedMySQLClientFoundRows(t *testing.T) *sql.DB {
+	t.Helper()
+	return openIsolatedMySQLWithOptions(t, true)
+}
+
+func openIsolatedMySQLWithOptions(t *testing.T, clientFoundRows bool) *sql.DB {
+	t.Helper()
 	dsn := os.Getenv("MYSQL_TEST_DSN")
 	if dsn == "" {
 		t.Skip("MYSQL_TEST_DSN is not set; real MySQL integration test skipped")
@@ -148,6 +214,7 @@ func openIsolatedMySQL(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("parse MYSQL_TEST_DSN: %v", err)
 	}
+	cfg.ClientFoundRows = clientFoundRows
 	cfg.DBName = ""
 	admin, err := sql.Open("mysql", cfg.FormatDSN())
 	if err != nil {
@@ -219,6 +286,22 @@ func tableExists(t *testing.T, ctx context.Context, db *sql.DB, name string) boo
 		t.Fatalf("check table %s: %v", name, err)
 	}
 	return count == 1
+}
+
+func columnExists(t *testing.T, ctx context.Context, db *sql.DB, table, column string) bool {
+	t.Helper()
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?", table, column).Scan(&count); err != nil {
+		t.Fatalf("check column %s.%s: %v", table, column, err)
+	}
+	return count == 1
+}
+
+func assertColumnExists(t *testing.T, ctx context.Context, db *sql.DB, table, column string) {
+	t.Helper()
+	if !columnExists(t, ctx, db, table, column) {
+		t.Errorf("expected column %s.%s to exist", table, column)
+	}
 }
 
 func assertTablesExist(t *testing.T, ctx context.Context, db *sql.DB, names []string) {

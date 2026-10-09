@@ -7,3 +7,5 @@
 - MySQL DDL is not transaction-atomic: migrations must record version/checksum/dirty direction, hold a connection-bound advisory lock, and use retry-safe SQL.
 - Rollback only the latest applied migration; down SQL may drop only objects created by that migration.
 - Do not import another domain's infrastructure implementation.
+- Resolve task/run-key races with the existing unique indexes, then return the stored row; never implement idempotency as check-then-insert.
+- Guard status updates by their current state; screening result rows, outcome summary, and SUCCESS share one transaction.
