@@ -7,7 +7,7 @@ GO_BUILDVCS_FLAG := $(if $(shell git rev-parse --show-toplevel 2>/dev/null),,-bu
 help:
 	@printf '%s\n' \
 	  'Stock Quant development targets:' \
-	  '  setup-python  Create the local Python virtual environment' \
+	  '  setup-python  Create the Python virtual environment and install dependencies' \
 	  '  doctor        Check required tool versions and provider configuration' \
 	  '  test          Run Go, Python, tool, and boundary checks' \
 	  '  check         Run the complete local CI quality gate' \
@@ -16,6 +16,7 @@ help:
 
 setup-python:
 	python3 -m venv .venv
+	.venv/bin/python -m pip install --requirement python/requirements.txt
 
 doctor:
 	./tools/env-check.sh
@@ -33,7 +34,7 @@ test-python:
 	  if [[ ! -x .venv/bin/python ]]; then \
 	    printf '%s\n' 'Python test environment missing; run: make setup-python' >&2; exit 1; \
 	  fi; \
-	  .venv/bin/python -m unittest discover -s python/tests; \
+	  PYTHONPATH=python .venv/bin/python -m unittest discover -s python/tests; \
 	else \
 	  printf '%s\n' 'No Python tests exist yet; Python tests will be added with the worker ticket.'; \
 	fi

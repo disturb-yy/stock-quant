@@ -29,5 +29,8 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install Python project dependencies
+        run: make setup-python
+
       - name: Run format, tests, vet, build, and secret checks
         run: ./tools/check.sh
