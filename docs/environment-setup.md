@@ -32,7 +32,7 @@ make doctor
 make test
 ```
 
-The Python environment currently uses only the standard library. Install future dependencies only from a ticket that records and locks them. P00-01 does not automatically load `.env`; export values into the shell or provide them through a local secret manager before using `make doctor`.
+The Python environment installs the pinned `jsonschema` validator required by the shared protocol. Run `make setup-python` to install the dependencies recorded in `python/requirements.txt`; later tickets must record and lock any additional dependencies. P00-01 does not automatically load `.env`; export values into the shell or provide them through a local secret manager before using `make doctor`.
 
 The Makefile disables Go VCS stamping only when the checkout has no Git repository, so the initial scaffold can build without Git metadata. Once the project is inside Git, Go's normal VCS stamping remains enabled. For direct Go commands in a non-Git checkout, set `GOFLAGS=-buildvcs=false`.
 

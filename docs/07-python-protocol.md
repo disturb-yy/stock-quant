@@ -1,5 +1,12 @@
 # 07 — Go ↔ Python 协议 v1（只传原始因子）
 
+## 契约与版本升级
+- `contracts/strategy-request.schema.json` 和 `contracts/strategy-result.schema.json` 是 Go 与 Python DTO 共用的唯一 wire contract。两端校验器都执行 Draft 2020-12 规则与日期 `format` 检查；必填字段、未知字段、hash 格式和数组结构必须严格验证。
+- `as_of` 必须是公历有效日期，年份范围为 `0001` 至 `9999`；Python 数值解析采用与 Go `float64` DTO 一致的 IEEE-754 语义，拒绝非有限值。
+- v1 的结构、字段语义、类型、枚举和编码规则保持不变。任何会改变接受/拒绝行为或字段含义的调整（包括增加可选字段，因为 v1 禁止未知属性）都创建新版本 schema，例如 `strategy-request.v2.schema.json` 与 `strategy-result.v2.schema.json`，并要求显式 `schema_version="v2"`。
+- 不根据缺失字段推断版本或填入必填默认值。v1 与后续版本由各自 DTO/校验器显式解析；迁移逻辑放在协议边界，不改变领域模型语义。
+- v1 的 stdout 必须恰好包含一份 JSON 文档。诊断信息写入 stderr；尾随第二份 JSON、额外文本及非标准 JSON 数值均视为协议错误。
+
 ## 设计决定
 - 初期以 `os/exec` subprocess 调用 Python worker（无守护服务/外部网络），`stdin` 一份 JSON 请求，`stdout` **恰好一份 JSON 响应**，`stderr` 独立日志。严禁把 debug print 写 stdout。
 - 生产大数据不从 JSON 传 5000×61 根 K 线：平台生成不可变/只读 `snapshot_ref` 指向受控目录的文件；后续可换 Parquet，最初 JSONL 可用。`contracts/strategy-request.schema.json` 用 `data_ref` 表示路径/哈希；适配器使用白名单本地路径，绝不能接受 URL 或 `../` 穿越。
